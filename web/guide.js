@@ -117,6 +117,16 @@ function initGuide() {
   document.body.addEventListener("click", (e) => {
     const g = e.target.closest("[data-guide]");
     if (!g) return;
+    // one gesture: a tapped departure row also arms its reminder
+    if (g.dataset.autorem) {
+      try {
+        const pay = JSON.parse(g.dataset.autorem);
+        const n = jstNow(), nowMin = n.h * 60 + n.mi;
+        if (pay.m > nowMin && ensureReminder(pay)) {
+          toast(`🔔 Reminder set for the ${fmtMin(pay.m)} departure — and here's your walk`);
+        }
+      } catch { /* malformed attr — just guide */ }
+    }
     const [lat, lon] = g.dataset.guide.split(",").map(Number);
     openGuide(lat, lon, g.dataset.guideName || "");
   });

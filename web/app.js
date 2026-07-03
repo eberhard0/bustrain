@@ -280,7 +280,9 @@ async function renderCompare() {
         : "";
       const kind = side === "train" ? "train" : "bus";
       const enH = enHeadsign(d.h, kind);
-      return `<div class="vdep ${missed ? "missed" : countClass(inMin)}" ${guideAttrs}>
+      const autorem = JSON.stringify({ stopId: cfg.id, m: d.m, r: d.r, h: d.h }).replace(/'/g, "&#39;");
+      return `<div class="vdep ${missed ? "missed" : countClass(inMin)}" ${guideAttrs}
+          data-autorem='${autorem}'>
         <div class="l1"><b>${fmtMin(d.m)}</b><span class="in">${inMin} min 🧭</span></div>
         <div class="l2">${esc(kind === "train" ? enRoute(d.r) : d.r)} · ${esc(d.h)}</div>
         ${enH ? `<div class="l2 ename">${esc(enH)}</div>` : ""}
@@ -349,6 +351,20 @@ function toggleReminder(payload) {
   }
   save(); refresh();
 }
+/* set a reminder if one doesn't already exist (one-gesture row taps) */
+function ensureReminder(payload) {
+  const exists = state.reminders.some((r) => r.stopId === payload.stopId &&
+    r.m === payload.m && r.h === payload.h && !r.fired);
+  if (exists) return false;
+  const meta = stopMeta(payload.stopId);
+  if (!meta) return false;
+  const rem = { ...payload, stopName: meta.name, kind: meta.kind, lead: state.lead,
+    dateKey: dateKey(jstNow()), fired: false };
+  state.reminders.push(rem);
+  save(); ensureNotifPermission(); pushSchedule(rem); renderReminders();
+  return true;
+}
+
 function ensureNotifPermission() {
   if ("Notification" in window && Notification.permission === "default") {
     Notification.requestPermission().then(() => ensurePush());
@@ -665,7 +681,7 @@ async function boot() {
   ensureGpsWatch();
   ensurePush();
   if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("sw.js?v=32").catch(() => {});
+    navigator.serviceWorker.register("sw.js?v=33").catch(() => {});
     // when a new version takes over, reload once so users always run latest
     let reloaded = false;
     navigator.serviceWorker.addEventListener("controllerchange", () => {
