@@ -4,7 +4,8 @@
 adapted to any city with open transit data.**
 
 Live demo: **https://bustrain.iameberhard.com** (install it from Safari/Chrome with
-"Add to Home Screen" — it's a PWA)
+"Add to Home Screen" — it's a PWA) · **User guide:**
+[bustrain.iameberhard.com/help.html](https://bustrain.iameberhard.com/help.html)
 
 <p align="center">
   <img src="docs/screenshot-journey.png" width="300" alt="Journey planner with map">

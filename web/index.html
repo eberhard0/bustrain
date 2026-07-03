@@ -10,7 +10,7 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
-<link rel="stylesheet" href="app.css?v=19">
+<link rel="stylesheet" href="app.css?v=20">
 </head>
 <body>
 <header>
@@ -32,7 +32,7 @@
         <li>Set any reminder and tap <b>Allow</b> when asked about notifications</li>
       </ol>
       <div class="howto-foot">Needs iOS 16.4 or newer. Done once, alerts arrive like any
-        app's — screen locked, app closed.</div>
+        app's — screen locked, app closed. <a href="help.html">Full guide →</a></div>
     </div>
     <div id="notif-banner" class="alert hidden">
       🔔 <span id="notif-msg">Enable notifications so reminders can reach you — even when
@@ -176,12 +176,14 @@
 </nav>
 
 <footer>
+  <a href="help.html" style="color:var(--brand);font-weight:600">📖 Help &amp; how-to</a> ·
+  <a href="https://github.com/eberhard0/bustrain" style="color:var(--brand)">GitHub</a><br>
   Timetable data: Ōita Pref. open data (Ōita Bus · Ōita Kōtsū · Kamenoi Bus, GTFS-JP) and JR Kyushu
   published station timetables. Scheduled times only — no live delay info. <span id="data-date"></span>
 </footer>
 
 <script src="vendor/leaflet/leaflet.js"></script>
-<script src="app.js?v=19"></script>
-<script src="trips.js?v=19"></script>
+<script src="app.js?v=20"></script>
+<script src="trips.js?v=20"></script>
 </body>
 </html>

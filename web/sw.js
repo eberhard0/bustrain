@@ -1,7 +1,7 @@
 /* BusTrain service worker — network-first everywhere so updates land
    immediately; cache is the offline fallback only. */
-const SHELL = "bt-shell-v19";
-const SHELL_FILES = ["./", "index.html", "app.css?v=19", "app.js?v=19", "trips.js?v=19",
+const SHELL = "bt-shell-v20";
+const SHELL_FILES = ["./", "index.html", "app.css?v=20", "app.js?v=20", "trips.js?v=20",
   "vendor/leaflet/leaflet.js", "vendor/leaflet/leaflet.css",
   "manifest.webmanifest", "icon.svg", "icon-192.png"];
 
