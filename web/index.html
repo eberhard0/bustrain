@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1a73e8">
+<meta name="description" content="Never miss your bus or train in Beppu &amp; Ōita — live countdowns and reminders from official timetables.">
+<title>BusTrain — Beppu &amp; Ōita departures</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+<link rel="stylesheet" href="app.css?v=17">
+</head>
+<body>
+<header>
+  <div class="logo">BT</div>
+  <h1>BusTrain<small id="hdr-sub">Beppu &amp; Ōita</small></h1>
+  <div class="clock" id="clock">--:--</div>
+</header>
+
+<main>
+  <!-- HOME -->
+  <section id="tab-home" class="tab">
+    <div id="notif-banner" class="alert hidden">
+      🔔 <span>Enable notifications so reminders can reach you.</span>
+      <button id="notif-enable" class="linkbtn">Enable</button>
+    </div>
+    <div id="next-reminder" class="alert amber hidden"></div>
+    <div id="home-cards"></div>
+    <div id="home-empty" class="empty hidden">
+      <p>🚏 No saved stops yet.</p>
+      <p>Find your bus stop or train station in <b>Search</b> or <b>Nearby</b> and tap ☆ to pin it here.</p>
+    </div>
+  </section>
+
+  <!-- SEARCH = JOURNEY PLANNER -->
+  <section id="tab-search" class="tab hidden">
+    <div id="journey">
+      <div class="jfield"><label>From</label>
+        <select id="j-from"><option value="loc">📍 My location</option></select></div>
+      <div class="jfield"><label>To</label>
+        <div class="jto-wrap">
+          <input id="j-to-input" type="search" autocomplete="off"
+            placeholder="Where to? (Umi Jigoku, airport…)">
+          <div id="j-sugg" class="sugg hidden"></div>
+        </div></div>
+      <div id="j-status" class="alert hidden"></div>
+      <div id="j-results"></div>
+    </div>
+    <div id="stop-search" class="hidden">
+      <div class="search"><span>🔍</span><input id="search-input" type="search"
+        placeholder="Stop or station name (e.g. 別府, Beppu, APU)…" autocomplete="off"></div>
+      <div class="filters">
+        <button class="fbtn active" data-f="all">All</button>
+        <button class="fbtn" data-f="train">🚆 Train</button>
+        <button class="fbtn" data-f="bus">🚌 Bus</button>
+      </div>
+      <div id="search-results"></div>
+    </div>
+  </section>
+
+  <!-- NEARBY -->
+  <section id="tab-nearby" class="tab hidden">
+    <div class="alert" id="nearby-status">📍 Tap the button to find stops around you.</div>
+    <button id="nearby-btn" class="bigbtn">Use my location</button>
+    <div id="nearby-results"></div>
+  </section>
+
+  <!-- COMPARE -->
+  <section id="tab-compare" class="tab hidden">
+    <div class="alert" id="vs-status">⚖️ Bus vs train, side by side — pick a stop for each
+      (or use your location) and see which one to catch, walk time included.</div>
+    <button id="vs-locate" class="bigbtn">Pick nearest bus stop + station for me</button>
+    <div class="vs-pickers">
+      <div class="vs-pick bus" id="vs-pick-bus"><div class="k">🚌 BUS STOP</div>
+        <div class="v" id="vs-bus-name">Tap to choose…</div><div class="w" id="vs-bus-walk"></div></div>
+      <div class="vs-pick train" id="vs-pick-train"><div class="k">🚆 TRAIN STATION</div>
+        <div class="v" id="vs-train-name">Tap to choose…</div><div class="w" id="vs-train-walk"></div></div>
+    </div>
+    <label class="lead-row">Going to:
+      <select id="vs-dest"><option value="">— choose destination station —</option></select>
+    </label>
+    <div id="vs-verdict" class="hidden"></div>
+    <div class="vs-cols hidden" id="vs-cols">
+      <div class="vs-col bus"><div class="col-head"><span>🚌 Bus</span><span id="vs-bus-head"></span></div>
+        <div id="vs-bus-list"></div></div>
+      <div class="vs-col train"><div class="col-head"><span>🚆 Train</span><span id="vs-train-head"></span></div>
+        <div id="vs-train-list"></div></div>
+    </div>
+  </section>
+
+  <!-- YOU: account, reminders, history, stats -->
+  <section id="tab-reminders" class="tab hidden">
+    <div class="card" id="account-box">
+      <div class="card-head"><div class="mode" style="background:#1a73e8">👤</div>
+        <div class="titles"><h2 id="acct-title">Your account</h2>
+          <div class="sub" id="acct-sub">Log in to save trips &amp; history across devices. Optional —
+            without it nothing is stored.</div></div></div>
+      <div id="acct-forms" style="padding:0 16px 14px">
+        <input id="acct-user" class="acct-in" placeholder="Username" autocomplete="username">
+        <input id="acct-pass" class="acct-in" type="password" placeholder="Password (min 6 chars)"
+          autocomplete="current-password">
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button id="acct-login" class="bigbtn" style="margin:0;flex:1">Log in</button>
+          <button id="acct-register" class="bigbtn" style="margin:0;flex:1;background:#0f9d58">Register</button>
+        </div>
+        <div id="acct-err" class="sub" style="color:#d93025;margin-top:6px"></div>
+      </div>
+      <div id="acct-logged" class="hidden" style="padding:0 16px 14px">
+        <button id="acct-logout" class="linkbtn">Log out</button>
+      </div>
+    </div>
+
+    <div class="section-h">🔔 Reminders</div>
+    <div class="alert" id="rem-note">Reminders fire as browser notifications while BusTrain is open
+      (installed as an app or in a tab — background tabs are fine on desktop).</div>
+    <label class="lead-row">Default lead time:
+      <select id="lead-select">
+        <option value="5">5 min before</option>
+        <option value="10" selected>10 min before</option>
+        <option value="15">15 min before</option>
+        <option value="20">20 min before</option>
+        <option value="30">30 min before</option>
+      </select>
+    </label>
+    <div id="rem-list"></div>
+    <div id="rem-empty" class="empty"><p>🔕 No reminders set.</p>
+      <p>Open a stop and tap the bell next to a departure.</p></div>
+
+    <div class="section-h">🧾 Trip history</div>
+    <div id="stats-box" class="hidden"></div>
+    <div id="hist-list"></div>
+    <div id="hist-empty" class="empty"><p>No trips logged yet.</p>
+      <p>Use <b>Search</b>, type where you're going and tap “I’m taking this” —
+      your trips and savings show up here.</p></div>
+  </section>
+</main>
+
+<!-- STOP DETAIL OVERLAY -->
+<div id="detail" class="overlay hidden">
+  <div class="sheet">
+    <div class="sheet-head">
+      <button id="detail-close" class="closebtn">‹</button>
+      <div class="titles"><h2 id="detail-name"></h2><div class="sub" id="detail-sub"></div></div>
+      <button id="detail-star" class="starbtn">☆</button>
+    </div>
+    <div class="daytabs" id="detail-days"></div>
+    <div id="detail-list"></div>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<nav>
+  <a data-tab="home" class="active"><span class="ico">🏠</span>Home</a>
+  <a data-tab="search"><span class="ico">🔍</span>Search</a>
+  <a data-tab="nearby"><span class="ico">📍</span>Nearby</a>
+  <a data-tab="compare"><span class="ico">⚖️</span>Bus vs Train</a>
+  <a data-tab="reminders"><span class="ico">👤</span>You<b id="rem-count" class="dot hidden"></b></a>
+</nav>
+
+<footer>
+  Timetable data: Ōita Pref. open data (Ōita Bus · Ōita Kōtsū · Kamenoi Bus, GTFS-JP) and JR Kyushu
+  published station timetables. Scheduled times only — no live delay info. <span id="data-date"></span>
+</footer>
+
+<script src="vendor/leaflet/leaflet.js"></script>
+<script src="app.js?v=17"></script>
+<script src="trips.js?v=17"></script>
+</body>
+</html>

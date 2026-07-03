@@ -1,0 +1,8 @@
+# server
+fastapi>=0.110
+uvicorn>=0.27
+
+# data pipeline uses only the Python standard library
+
+# optional: visual QA harness (ops/qa/)
+# playwright>=1.40   # then: playwright install chromium webkit
