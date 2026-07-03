@@ -110,6 +110,10 @@ async function busViaPatterns(oLat, oLon, place, nowMin, tk, yk, originOverride)
   const destStops = near(place.lat, place.lon, 600, 6);
   if (!originStops.length || !destStops.length) return null;
   const destByName = new Map(destStops.map((s) => [s.name, s]));
+  // a candidate wins on clearly-earlier arrival; on near-ties (≤3 min) the one
+  // with LESS WALKING wins — riding two more stops beats a 10-minute walk
+  const better = (cand, cur) => !cur || cand.total < cur.total - 3 ||
+    (cand.total <= cur.total + 3 && cand.finalWalk < cur.finalWalk);
   let best = null;
   for (const os of originStops) {
     const stop = await loadStop(os.id);
@@ -118,21 +122,22 @@ async function busViaPatterns(oLat, oLon, place, nowMin, tk, yk, originOverride)
       if (best && d.m >= best.total) break; // later departures can't beat current best
       const pat = d.p && state.patterns[d.p];
       if (!pat) continue;
+      // check EVERY dest-area stop this ride passes — the first match is not
+      // necessarily the one closest to where the rider is actually going
       for (let j = d.i + 1; j < pat.s.length; j++) {
         const ds = destByName.get(pat.s[j]);
         if (!ds) continue;
         const arr = d.m + pat.o[j] - pat.o[d.i];
         const finalWalk = walkMin(ds._d);
-        if (!best || arr + finalWalk < best.total) {
-          const fare = (pat.f && pat.f[d.i] && pat.f[d.i][j - d.i - 1]) || null;
-          best = { total: arr + finalWalk, dep: d.m, arr, dur: arr - d.m, stops: j - d.i - 1,
-            sign: d.h, signEn: en(d.h), label: `${d.r ? "[" + d.r + "] " : ""}from ${os.name}`,
-            labelEn: `from ${en(os.name) || os.name}`,
-            walk, lat: os.lat, lon: os.lon, boardAt: os.name, stopId: os.id,
-            alightName: ds.name, alightLat: ds.lat, alightLon: ds.lon,
-            finalWalk, finalDist: ds._d, fare };
-        }
-        break;
+        const cand = { total: arr + finalWalk, dep: d.m, arr, dur: arr - d.m,
+          stops: j - d.i - 1, sign: d.h, signEn: en(d.h),
+          label: `${d.r ? "[" + d.r + "] " : ""}from ${os.name}`,
+          labelEn: `from ${en(os.name) || os.name}`,
+          walk, lat: os.lat, lon: os.lon, boardAt: os.name, stopId: os.id,
+          alightName: ds.name, alightLat: ds.lat, alightLon: ds.lon,
+          finalWalk, finalDist: ds._d,
+          fare: (pat.f && pat.f[d.i] && pat.f[d.i][j - d.i - 1]) || null };
+        if (better(cand, best)) best = cand;
       }
     }
   }
