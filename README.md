@@ -33,6 +33,9 @@ off. BusTrain answers exactly those questions:
 - **Get-off alerts, two triggers.** A notification fires ~3 min before scheduled
   arrival *and* when GPS says you're within 400 m (bus) / 800 m (train) of your stop.
   Works without an account.
+- **Real background notifications (Web Push).** Scheduled reminders are also
+  delivered by the server — they arrive with the app closed and the screen locked,
+  on Android, desktop, and iPhone (iOS 16.4+, installed to Home Screen).
 - **Everything bilingual.** Kanji (to match signs on the street) + romaji/English
   side by side, from official translations where available and auto-romanized kana
   where not.
@@ -118,13 +121,31 @@ landmarks and checking the feed's quirks (day-type calendars vary wildly).
 - `ops/qa/qa_full.py` is a Playwright harness that captures every view on desktop
   Chromium and an emulated iPhone (WebKit) — run it after changes.
 
+## Enabling notifications on iPhone (for users)
+
+Apple only allows web-app notifications for apps installed to the Home Screen
+(iOS 16.4+). One-time setup:
+
+1. Open the site in **Safari** and tap the **Share** button (square with an arrow).
+2. Scroll down, tap **Add to Home Screen**, then **Add**.
+3. Open **BusTrain from the new icon** — not from Safari.
+4. Set any reminder and tap **Allow** when iOS asks about notifications.
+
+After that, departure and get-off reminders arrive like any app's notifications —
+app closed, screen locked. (The app shows this walkthrough automatically to
+Safari-on-iPhone visitors.) If you previously tapped "Don't Allow": Settings →
+Notifications → BusTrain → Allow Notifications.
+
+To run push on your own deployment: `pip install pywebpush`, then generate keys
+once — see `server/main.py` (`vapid_private.pem` / `vapid_public.txt`, both
+gitignored). Without keys the app quietly falls back to open-app reminders.
+
 ## Honest limitations
 
 - **Scheduled times only.** The open data has no realtime vehicle positions, so
   delays are invisible. Treat tight connections accordingly.
-- **Reminders fire while the app is open** (foreground on iOS, background tab OK on
-  desktop). There is no push server yet; GPS get-off alerts likewise need the app
-  on screen during the ride.
+- **GPS get-off alerts need the app on screen during the ride** (browser geolocation
+  stops in background). The scheduled-time alert covers the closed-app case via push.
 - **JR fares are approximate** (distance-ladder estimate, marked with "~"). Bus
   fares are exact where the GTFS fare tables cover the hop, and the app says so
   when they don't.
@@ -145,8 +166,8 @@ landmarks and checking the feed's quirks (day-type calendars vary wildly).
 
 ## Roadmap
 
-- Web-push server (VAPID) for true background reminders
 - GTFS-Realtime ingestion where available
+- GPS get-off alerts that survive backgrounding (needs a native wrapper)
 - More regions — the pipeline is the product; Beppu/Ōita is edition #1
 
 ## License

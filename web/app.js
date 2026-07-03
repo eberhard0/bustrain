@@ -349,18 +349,74 @@ function renderReminders() {
 function toggleReminder(payload) {
   const n = jstNow(), tk = dateKey(n);
   const i = state.reminders.findIndex((r) => r.stopId === payload.stopId && r.m === payload.m && r.h === payload.h && !r.fired);
-  if (i >= 0) { state.reminders.splice(i, 1); toast("Reminder removed"); }
-  else {
+  if (i >= 0) {
+    const [removed] = state.reminders.splice(i, 1);
+    pushCancel(removed);
+    toast("Reminder removed");
+  } else {
     const meta = stopMeta(payload.stopId);
-    state.reminders.push({ ...payload, stopName: meta.name, kind: meta.kind, lead: state.lead,
-      dateKey: tk, fired: false });
+    const rem = { ...payload, stopName: meta.name, kind: meta.kind, lead: state.lead,
+      dateKey: tk, fired: false };
+    state.reminders.push(rem);
     toast(`🔔 Reminder set — ${state.lead} min before ${fmtMin(payload.m)}`);
     ensureNotifPermission();
+    pushSchedule(rem);
   }
   save(); refresh();
 }
 function ensureNotifPermission() {
-  if ("Notification" in window && Notification.permission === "default") Notification.requestPermission();
+  if ("Notification" in window && Notification.permission === "default") {
+    Notification.requestPermission().then(() => ensurePush());
+  }
+}
+
+/* ---------- web push: reminders that work with the app CLOSED ----------
+   iOS 16.4+: only for Home-Screen-installed web apps. Android/desktop: any. */
+let pushSubCache = null;
+function b64ToU8(b64) {
+  const pad = "=".repeat((4 - (b64.length % 4)) % 4);
+  const s = (b64 + pad).replace(/-/g, "+").replace(/_/g, "/");
+  return Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+}
+async function ensurePush() {
+  try {
+    if (!("PushManager" in window) || !("serviceWorker" in navigator)) return null;
+    if (Notification.permission !== "granted") return null;
+    if (pushSubCache) return pushSubCache;
+    const reg = await navigator.serviceWorker.ready;
+    pushSubCache = await reg.pushManager.getSubscription();
+    if (!pushSubCache) {
+      const k = await (await fetch("/api/push/key")).json();
+      if (!k.enabled) return null;
+      pushSubCache = await reg.pushManager.subscribe(
+        { userVisibleOnly: true, applicationServerKey: b64ToU8(k.key) });
+    }
+    return pushSubCache;
+  } catch { return null; }
+}
+function reminderEpoch(r) { // JST dateKey+minutes -> epoch seconds of the ALERT time
+  const y = +r.dateKey.slice(0, 4), mo = +r.dateKey.slice(4, 6), d = +r.dateKey.slice(6, 8);
+  return Date.UTC(y, mo - 1, d) / 1000 - 9 * 3600 + (r.m - r.lead) * 60;
+}
+const remKey = (r) => `${r.type || "dep"}|${r.stopId || r.stopName}|${r.m}|${r.h}`;
+async function pushSchedule(r) {
+  const sub = await ensurePush();
+  if (!sub) return;
+  const isArr = r.type === "arrive";
+  fetch("/api/push/remind", { method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      subscription: sub.toJSON(), fireAt: reminderEpoch(r), key: remKey(r), tag: `bt${r.m}`,
+      title: isArr ? `🎯 Get off: ${r.stopName} ${en(r.stopName)}`
+                   : `${r.kind === "train" ? "🚆" : "🚌"} ${r.kind === "train" ? enRoute(r.r) : r.r} ${r.h}`,
+      body: isArr ? `Arriving around ${fmtMin(r.m)} — get ready to get off.`
+                  : `Leaves ${r.stopName} ${en(r.stopName)} at ${fmtMin(r.m)}.`,
+    }) }).catch(() => {});
+}
+async function pushCancel(r) {
+  const sub = await ensurePush();
+  if (!sub) return;
+  fetch("/api/push/cancel", { method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ endpoint: sub.endpoint, key: remKey(r) }) }).catch(() => {});
 }
 async function notify(title, body, tag) {
   try {
@@ -532,7 +588,9 @@ function bindEvents() {
     } else if (bell) {
       toggleReminder(JSON.parse(bell.dataset.rem));
     } else if (del) {
-      state.reminders.splice(parseInt(del.dataset.del, 10), 1); save(); renderReminders();
+      const [removed] = state.reminders.splice(parseInt(del.dataset.del, 10), 1);
+      if (removed) pushCancel(removed);
+      save(); renderReminders();
       ensureGpsWatch();
     } else if (day) {
       state.detailDay = day.dataset.day; renderDetail();
@@ -571,12 +629,37 @@ function bindEvents() {
     $("#search-input").value = ""; toast("Pick a train station for the comparison"); renderSearch(); });
   $("#lead-select").addEventListener("change", (e) => { state.lead = parseInt(e.target.value, 10); save(); });
   $("#notif-enable").addEventListener("click", async () => {
-    await Notification.requestPermission(); updateNotifBanner();
+    await Notification.requestPermission();
+    await ensurePush(); // register for background delivery too
+    updateNotifBanner();
+  });
+  $("#howto-close").addEventListener("click", () => {
+    localStorage.setItem("bt_howto_done", "1");
+    $("#ios-howto").classList.add("hidden");
   });
 }
+const IS_IOS = /iP(hone|ad|od)/.test(navigator.userAgent);
+const IS_STANDALONE = window.matchMedia("(display-mode: standalone)").matches ||
+  navigator.standalone === true;
 function updateNotifBanner() {
-  const show = "Notification" in window && Notification.permission !== "granted" &&
-    state.reminders.some((r) => !r.fired);
+  // iPhone in Safari (not installed): show the Add-to-Home-Screen walkthrough
+  const showHowto = IS_IOS && !IS_STANDALONE && !localStorage.getItem("bt_howto_done");
+  $("#ios-howto").classList.toggle("hidden", !showHowto);
+
+  const perm = "Notification" in window ? Notification.permission : "unsupported";
+  let show = false;
+  if (perm === "default" && (IS_STANDALONE || state.reminders.some((r) => !r.fired))) {
+    show = true;
+    $("#notif-msg").textContent =
+      "Enable notifications so reminders can reach you — even when the app is closed.";
+    $("#notif-enable").classList.remove("hidden");
+  } else if (perm === "denied" && state.reminders.some((r) => !r.fired)) {
+    show = true;
+    $("#notif-msg").textContent = IS_IOS
+      ? "Notifications are off. Turn them on in Settings → Notifications → BusTrain."
+      : "Notifications are blocked for this site — allow them in your browser settings.";
+    $("#notif-enable").classList.add("hidden");
+  }
   $("#notif-banner").classList.toggle("hidden", !show);
 }
 
@@ -605,8 +688,9 @@ async function boot() {
   updateNotifBanner();
   fireDue();
   ensureGpsWatch();
+  ensurePush();
   if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("sw.js?v=17").catch(() => {});
+    navigator.serviceWorker.register("sw.js?v=19").catch(() => {});
     // when a new version takes over, reload once so users always run latest
     let reloaded = false;
     navigator.serviceWorker.addEventListener("controllerchange", () => {

@@ -3,6 +3,7 @@
 Anonymous users get the full app; nothing is persisted server-side
 unless they register/log in. Run: uvicorn main:app --port 3021
 """
+import asyncio
 import hashlib
 import json
 import secrets
@@ -13,6 +14,12 @@ from pathlib import Path
 from fastapi import FastAPI, Request, Response, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+
+try:
+    from pywebpush import webpush, WebPushException
+    PUSH_OK = True
+except ImportError:  # push is optional — app still works without it
+    PUSH_OK = False
 
 ROOT = Path(__file__).resolve().parent
 WEB = ROOT.parent / "web"
@@ -57,6 +64,14 @@ def init_db():
         CREATE TABLE IF NOT EXISTS history(
           id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
           ts REAL NOT NULL, kind TEXT NOT NULL, data TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS push_subs(
+          id INTEGER PRIMARY KEY, endpoint TEXT UNIQUE NOT NULL,
+          sub_json TEXT NOT NULL, created REAL NOT NULL);
+        CREATE TABLE IF NOT EXISTS push_reminders(
+          id INTEGER PRIMARY KEY, sub_id INTEGER NOT NULL REFERENCES push_subs(id) ON DELETE CASCADE,
+          fire_at REAL NOT NULL, title TEXT NOT NULL, body TEXT NOT NULL,
+          tag TEXT NOT NULL, client_key TEXT NOT NULL, sent INTEGER DEFAULT 0);
+        CREATE INDEX IF NOT EXISTS idx_pr_due ON push_reminders(sent, fire_at);
         """)
 
 
@@ -172,6 +187,120 @@ def delete_history(item_id: int, request: Request):
     with db() as c:
         c.execute("DELETE FROM history WHERE id=? AND user_id=?", (item_id, user["id"]))
     return {"ok": True}
+
+
+### Web Push — lets get-off/departure reminders reach an installed PWA
+### even when it's closed (iOS 16.4+ Home Screen apps, Android, desktop).
+VAPID_PRIV = ROOT / "vapid_private.pem"
+VAPID_PUB = (ROOT / "vapid_public.txt").read_text().strip() \
+    if (ROOT / "vapid_public.txt").exists() else ""
+VAPID_CLAIMS = {"sub": "mailto:ebert.ojong@gmail.com"}
+
+
+class PushSub(BaseModel):
+    subscription: dict
+
+
+class PushRemind(BaseModel):
+    subscription: dict
+    fireAt: float          # epoch seconds UTC
+    title: str = Field(max_length=120)
+    body: str = Field(max_length=300)
+    tag: str = Field(max_length=64)
+    key: str = Field(max_length=128)
+
+
+class PushCancel(BaseModel):
+    endpoint: str
+    key: str = Field(max_length=128)
+
+
+def _sub_id(c, subscription: dict) -> int:
+    ep = subscription.get("endpoint", "")
+    if not ep.startswith("https://"):
+        raise HTTPException(400, "Bad subscription.")
+    row = c.execute("SELECT id FROM push_subs WHERE endpoint=?", (ep,)).fetchone()
+    if row:
+        c.execute("UPDATE push_subs SET sub_json=? WHERE id=?",
+                  (json.dumps(subscription), row["id"]))
+        return row["id"]
+    return c.execute("INSERT INTO push_subs(endpoint, sub_json, created) VALUES(?,?,?)",
+                     (ep, json.dumps(subscription), time.time())).lastrowid
+
+
+@app.get("/api/push/key")
+def push_key():
+    return {"key": VAPID_PUB, "enabled": PUSH_OK and bool(VAPID_PUB)}
+
+
+@app.post("/api/push/remind")
+def push_remind(req: PushRemind):
+    if not (PUSH_OK and VAPID_PUB):
+        raise HTTPException(503, "Push not configured on this server.")
+    if not time.time() - 60 <= req.fireAt <= time.time() + 48 * 3600:
+        raise HTTPException(400, "Reminder time must be within the next 48 h.")
+    with db() as c:
+        sid = _sub_id(c, req.subscription)
+        n = c.execute("SELECT COUNT(*) FROM push_reminders WHERE sub_id=? AND sent=0",
+                      (sid,)).fetchone()[0]
+        if n >= 50:
+            raise HTTPException(429, "Too many pending reminders.")
+        c.execute("DELETE FROM push_reminders WHERE sub_id=? AND client_key=? AND sent=0",
+                  (sid, req.key))
+        c.execute("INSERT INTO push_reminders(sub_id, fire_at, title, body, tag, client_key) "
+                  "VALUES(?,?,?,?,?,?)",
+                  (sid, req.fireAt, req.title, req.body, req.tag, req.key))
+    return {"ok": True}
+
+
+@app.post("/api/push/cancel")
+def push_cancel(req: PushCancel):
+    with db() as c:
+        c.execute("DELETE FROM push_reminders WHERE sent=0 AND client_key=? AND sub_id IN "
+                  "(SELECT id FROM push_subs WHERE endpoint=?)", (req.key, req.endpoint))
+    return {"ok": True}
+
+
+def _deliver_due():
+    with db() as c:
+        due = c.execute(
+            "SELECT r.id, r.title, r.body, r.tag, s.sub_json, s.id AS sid "
+            "FROM push_reminders r JOIN push_subs s ON s.id=r.sub_id "
+            "WHERE r.sent=0 AND r.fire_at<=? LIMIT 20", (time.time(),)).fetchall()
+    for r in due:
+        try:
+            webpush(json.loads(r["sub_json"]),
+                    json.dumps({"title": r["title"], "body": r["body"], "tag": r["tag"]}),
+                    vapid_private_key=str(VAPID_PRIV), vapid_claims=dict(VAPID_CLAIMS),
+                    ttl=600)
+        except WebPushException as e:
+            code = getattr(e.response, "status_code", 0)
+            if code in (404, 410):  # subscription is gone — drop it
+                with db() as c:
+                    c.execute("DELETE FROM push_subs WHERE id=?", (r["sid"],))
+                continue
+        except Exception:
+            pass  # transient — row stays unsent only if we continue before marking
+        with db() as c:
+            c.execute("UPDATE push_reminders SET sent=1 WHERE id=?", (r["id"],))
+    # housekeeping: drop delivered rows older than a day
+    with db() as c:
+        c.execute("DELETE FROM push_reminders WHERE sent=1 AND fire_at<?", (time.time() - 86400,))
+
+
+@app.on_event("startup")
+async def _push_loop():
+    if not (PUSH_OK and VAPID_PUB):
+        return
+
+    async def loop():
+        while True:
+            try:
+                await asyncio.to_thread(_deliver_due)
+            except Exception:
+                pass
+            await asyncio.sleep(15)
+    asyncio.create_task(loop())
 
 
 app.mount("/", StaticFiles(directory=WEB, html=True), name="static")

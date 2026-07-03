@@ -10,7 +10,7 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
-<link rel="stylesheet" href="app.css?v=17">
+<link rel="stylesheet" href="app.css?v=19">
 </head>
 <body>
 <header>
@@ -22,8 +22,21 @@
 <main>
   <!-- HOME -->
   <section id="tab-home" class="tab">
+    <div id="ios-howto" class="howto hidden">
+      <div class="howto-head">📲 <b>iPhone: get reminders even when the app is closed</b>
+        <button id="howto-close" class="linkbtn" style="margin-left:auto">✕</button></div>
+      <ol>
+        <li>Tap the <b>Share</b> button <span class="kbd">⬆︎</span> at the bottom of Safari</li>
+        <li>Scroll down and tap <b>Add to Home Screen</b>, then <b>Add</b></li>
+        <li>Open <b>BusTrain from the new icon</b> (not from Safari)</li>
+        <li>Set any reminder and tap <b>Allow</b> when asked about notifications</li>
+      </ol>
+      <div class="howto-foot">Needs iOS 16.4 or newer. Done once, alerts arrive like any
+        app's — screen locked, app closed.</div>
+    </div>
     <div id="notif-banner" class="alert hidden">
-      🔔 <span>Enable notifications so reminders can reach you.</span>
+      🔔 <span id="notif-msg">Enable notifications so reminders can reach you — even when
+        the app is closed.</span>
       <button id="notif-enable" class="linkbtn">Enable</button>
     </div>
     <div id="next-reminder" class="alert amber hidden"></div>
@@ -113,8 +126,10 @@
     </div>
 
     <div class="section-h">🔔 Reminders</div>
-    <div class="alert" id="rem-note">Reminders fire as browser notifications while BusTrain is open
-      (installed as an app or in a tab — background tabs are fine on desktop).</div>
+    <div class="alert" id="rem-note">📲 On iPhone: <b>Share → Add to Home Screen</b>, open BusTrain
+      from the icon and allow notifications — departure &amp; get-off reminders then arrive
+      <b>even when the app is closed</b> (iOS 16.4+, Android, desktop). Only the GPS-based
+      get-off alert needs the app open during the ride.</div>
     <label class="lead-row">Default lead time:
       <select id="lead-select">
         <option value="5">5 min before</option>
@@ -166,7 +181,7 @@
 </footer>
 
 <script src="vendor/leaflet/leaflet.js"></script>
-<script src="app.js?v=17"></script>
-<script src="trips.js?v=17"></script>
+<script src="app.js?v=19"></script>
+<script src="trips.js?v=19"></script>
 </body>
 </html>

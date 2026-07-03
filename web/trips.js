@@ -522,11 +522,13 @@ async function logTrip(mode) {
   const destSt = state.corridors?.stations[trip.to];
   const aLat = chosen.alightLat ?? (destSt ? destSt.lat : null);
   const aLon = chosen.alightLon ?? (destSt ? destSt.lon : null);
-  state.reminders.push({ type: "arrive", stopName: chosen.alightName || trip.to,
+  const arrRem = { type: "arrive", stopName: chosen.alightName || trip.to,
     m: chosen.arr, lead: 3,
     r: chosen.label, h: `Get off at ${chosen.alightName || trip.to}`, kind: mode,
-    dateKey: dateKey(n), fired: false, lat: aLat, lon: aLon });
+    dateKey: dateKey(n), fired: false, lat: aLat, lon: aLon };
+  state.reminders.push(arrRem);
   save(); ensureNotifPermission(); renderReminders(); ensureGpsWatch();
+  pushSchedule(arrRem); // background delivery for installed PWAs
   const alertMsg = `⏰📡 Get-off alert set: ${trip.to} ${en(trip.to)} ~${fmtMin(chosen.arr)}` +
     (destSt ? " · GPS watching" : "");
   if (!state.user) {

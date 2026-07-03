@@ -16,3 +16,5 @@ designs/
 __pycache__/
 *.pyc
 nohup.out
+server/vapid_private.pem
+server/vapid_public.txt

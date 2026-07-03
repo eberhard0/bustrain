@@ -1,7 +1,7 @@
 /* BusTrain service worker — network-first everywhere so updates land
    immediately; cache is the offline fallback only. */
-const SHELL = "bt-shell-v17";
-const SHELL_FILES = ["./", "index.html", "app.css?v=17", "app.js?v=17", "trips.js?v=17",
+const SHELL = "bt-shell-v19";
+const SHELL_FILES = ["./", "index.html", "app.css?v=19", "app.js?v=19", "trips.js?v=19",
   "vendor/leaflet/leaflet.js", "vendor/leaflet/leaflet.css",
   "manifest.webmanifest", "icon.svg", "icon-192.png"];
 
@@ -27,6 +27,13 @@ self.addEventListener("fetch", (e) => {
       return r;
     }).catch(() => caches.match(e.request))
   );
+});
+self.addEventListener("push", (e) => {
+  let d = {};
+  try { d = e.data.json(); } catch { /* no payload */ }
+  e.waitUntil(self.registration.showNotification(d.title || "BusTrain", {
+    body: d.body || "", icon: "icon-192.png", badge: "icon-192.png",
+    tag: d.tag || "bt-push", requireInteraction: true, vibrate: [200, 100, 200] }));
 });
 self.addEventListener("notificationclick", (e) => {
   e.notification.close();
