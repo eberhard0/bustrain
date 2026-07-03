@@ -273,9 +273,12 @@ async function renderCompare() {
       const leaveTxt = w
         ? (missed ? "⚠ can't make it on foot" : leaveIn === 0 ? "🚶 leave NOW" : `🚶 leave in ${leaveIn} min (${fmtMin(d.m - w)})`)
         : "";
+      const kind = side === "train" ? "train" : "bus";
+      const enH = enHeadsign(d.h, kind);
       return `<div class="vdep ${missed ? "missed" : countClass(inMin)}">
         <div class="l1"><b>${fmtMin(d.m)}</b><span class="in">${inMin} min</span></div>
-        <div class="l2">${esc(d.r)} · ${esc(d.h)}</div>
+        <div class="l2">${esc(kind === "train" ? enRoute(d.r) : d.r)} · ${esc(d.h)}</div>
+        ${enH ? `<div class="l2 ename">${esc(enH)}</div>` : ""}
         ${leaveTxt ? `<div class="leave">${leaveTxt}</div>` : ""}
       </div>`;
     }).join("") || `<div class="vdep"><div class="l2">No more departures today.</div></div>`;
@@ -657,7 +660,7 @@ async function boot() {
   ensureGpsWatch();
   ensurePush();
   if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("sw.js?v=27").catch(() => {});
+    navigator.serviceWorker.register("sw.js?v=28").catch(() => {});
     // when a new version takes over, reload once so users always run latest
     let reloaded = false;
     navigator.serviceWorker.addEventListener("controllerchange", () => {

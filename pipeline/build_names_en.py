@@ -108,6 +108,7 @@ def main():
                 names[r["trans_id"]] = kana_to_romaji(r["translation"])
         for r in rows:
             en = r["translation"].strip()
+            en = re.sub(r"\s*\((Each|Both) Direction s?\)|\s*\((Each|Both) Directions?\)", "", en)
             if r["lang"] == "en" and en and en != "-1":
                 names[r["trans_id"]] = en
     n_bus = len(names)

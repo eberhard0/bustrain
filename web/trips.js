@@ -363,7 +363,7 @@ async function renderVerdict() {
   }
   const line = (side, x) => x
     ? `${side === "bus" ? "🚌" : "🚆"} <b>${fmtMin(x.dep)} → ~${fmtMin(x.total ?? x.arr)}</b> at ${esc(p.n)}
-       · get off ${esc(x.alightName || "")}${x.finalWalk ? ` + 🚶 ${x.finalWalk} min` : ""}
+       · get off ${esc(x.alightName || "")} ${esc(en(x.alightName) || "")}${x.finalWalk ? ` + 🚶 ${x.finalWalk} min` : ""}
        · ${x.fare ? "~¥" + x.fare : "fare n/a"}`
     : `${side === "bus" ? "🚌" : "🚆"} no option today`;
   const note = savingsNote(bus, train, esc(p.n), true);
