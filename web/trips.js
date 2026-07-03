@@ -18,8 +18,11 @@ const LINES = {
     "豊後清川", "緒方", "朝地", "豊後竹田", "宮地", "阿蘇", "立野", "肥後大津", "熊本"],
 };
 
-state.destPlace = JSON.parse(localStorage.getItem("bt_destplace") || "null");
-state.vsPlace = JSON.parse(localStorage.getItem("bt_vsplace") || "null");
+// destinations are per-session on purpose: every page load starts a clean search
+state.destPlace = null;
+state.vsPlace = null;
+localStorage.removeItem("bt_destplace");
+localStorage.removeItem("bt_vsplace");
 state.user = null;
 state.history = [];
 state.corridors = null;
@@ -671,7 +674,6 @@ function repeatTrip(id) {
     (st ? { n: t.to, e: en(t.to), lat: st.lat, lon: st.lon, k: "station" } : null);
   if (pl) {
     state.vsPlace = pl;
-    localStorage.setItem("bt_vsplace", JSON.stringify(pl));
     const inp = $("#vs-to-input");
     if (inp) inp.value = `${pl.n}${pl.e ? " · " + pl.e : ""}`;
   }
@@ -683,12 +685,10 @@ function repeatTrip(id) {
 function initTrips() {
   bindPlaceSearch("#j-to-input", "#j-sugg", (p) => {
     state.destPlace = p;
-    localStorage.setItem("bt_destplace", JSON.stringify(p));
     renderJourney();
   });
   bindPlaceSearch("#vs-to-input", "#vs-sugg", (p) => {
     state.vsPlace = p;
-    localStorage.setItem("bt_vsplace", JSON.stringify(p));
     renderVerdict();
   });
   $("#j-from").addEventListener("change", (e) => {
