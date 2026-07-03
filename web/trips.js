@@ -379,7 +379,10 @@ async function renderJourney() {
         ${x.lat ? `<br><button class="linkbtn guidebtn" data-guide="${x.lat},${x.lon}"
             data-guide-name="${esc(x.boardAt || "")}">🧭 Guide me to the stop</button>
           · <a class="maps" target="_blank" rel="noopener"
-          href="https://www.google.com/maps/dir/?api=1&destination=${x.lat},${x.lon}&travelmode=walking">Google Maps</a>` : ""}</div>
+          href="https://www.google.com/maps/dir/?api=1&destination=${x.lat},${x.lon}&travelmode=walking">Google Maps</a>` : ""}
+        ${x.alightLat != null && place.lat != null ? `<br><button class="linkbtn guidebtn"
+            data-guide="${place.lat},${place.lon}" data-guide-name="${esc(place.n)}">
+            🧭 After you get off: walk me to ${esc(place.n)}</button>` : ""}</div>
       <button class="jtake" style="background:var(--${side})" data-take="${side}">
         ${side === "bus" ? "🚌 I’m taking this bus" : "🚆 I’m taking this train"}</button>
     </div>`;
@@ -524,10 +527,15 @@ async function logTrip(mode) {
   const destSt = state.corridors?.stations[trip.to];
   const aLat = chosen.alightLat ?? (destSt ? destSt.lat : null);
   const aLon = chosen.alightLon ?? (destSt ? destSt.lon : null);
+  const placePt = state.destPlace && state.destPlace.n === lo.d
+    ? state.destPlace
+    : (destSt ? { n: lo.d, lat: destSt.lat, lon: destSt.lon } : null);
   const arrRem = { type: "arrive", stopName: chosen.alightName || trip.to,
     m: chosen.arr, lead: 3,
     r: chosen.label, h: `Get off at ${chosen.alightName || trip.to}`, kind: mode,
-    dateKey: dateKey(n), fired: false, lat: aLat, lon: aLon };
+    dateKey: dateKey(n), fired: false, lat: aLat, lon: aLon,
+    placeName: placePt ? placePt.n : null,
+    placeLat: placePt ? placePt.lat : null, placeLon: placePt ? placePt.lon : null };
   state.reminders.push(arrRem);
   save(); ensureNotifPermission(); renderReminders(); ensureGpsWatch();
   pushSchedule(arrRem); // background delivery for installed PWAs

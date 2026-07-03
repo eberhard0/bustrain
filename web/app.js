@@ -15,6 +15,8 @@ const ALIAS = {
   "大分大学前": "oita university", "中判田": "nakahanda", "竹中": "takenaka",
   "鉄輪": "kannawa", "立命館": "apu ritsumeikan", "杉乃井": "suginoi",
   "由布院": "yufuin", "湯布院": "yufuin", "駅": "station eki",
+  "地獄": "jigoku hell", "海地獄": "umi jigoku", "血の池": "chinoike",
+  "空港": "airport kuko", "温泉": "onsen hot spring", "病院": "hospital byoin",
 };
 
 const state = {
@@ -343,6 +345,10 @@ function renderReminders() {
             ? ` · 📡 GPS armed — fires within ${(GPS_RADIUS[r.kind] || 400)} m of your stop (keep BusTrain open)`
             : ""}`
         : `${esc(r.stopName)} ${esc(en(r.stopName))} — alert ${r.lead} min before (${fmtMin(r.m - r.lead)})`}</div></div>
+    ${r.type === "arrive" && (r.placeLat ?? r.lat) != null
+      ? `<button class="star" title="Walk me there"
+           data-guide="${r.placeLat ?? r.lat},${r.placeLon ?? r.lon}"
+           data-guide-name="${esc(r.placeName || r.stopName)}">🧭</button>` : ""}
     <button class="star on" data-del="${state.reminders.indexOf(r)}">✕</button>
   </div>`).join("");
 }
@@ -690,7 +696,7 @@ async function boot() {
   ensureGpsWatch();
   ensurePush();
   if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("sw.js?v=22").catch(() => {});
+    navigator.serviceWorker.register("sw.js?v=23").catch(() => {});
     // when a new version takes over, reload once so users always run latest
     let reloaded = false;
     navigator.serviceWorker.addEventListener("controllerchange", () => {
