@@ -10,7 +10,7 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
-<link rel="stylesheet" href="app.css?v=20">
+<link rel="stylesheet" href="app.css?v=22">
 </head>
 <body>
 <header>
@@ -158,10 +158,23 @@
     <div class="sheet-head">
       <button id="detail-close" class="closebtn">‹</button>
       <div class="titles"><h2 id="detail-name"></h2><div class="sub" id="detail-sub"></div></div>
+      <button id="detail-guide" class="starbtn" title="Walk me there">🧭</button>
       <button id="detail-star" class="starbtn">☆</button>
     </div>
     <div class="daytabs" id="detail-days"></div>
     <div id="detail-list"></div>
+  </div>
+</div>
+
+<!-- WALKING GUIDANCE OVERLAY -->
+<div id="guide" class="overlay hidden">
+  <div class="sheet" style="overflow:hidden">
+    <div class="sheet-head">
+      <button id="guide-close" class="closebtn">‹</button>
+      <div class="titles"><h2 id="guide-name"></h2><div class="sub" id="guide-sub"></div></div>
+      <button id="guide-follow" class="starbtn" title="Re-center on me">🎯</button>
+    </div>
+    <div id="guide-map"></div>
   </div>
 </div>
 
@@ -183,7 +196,8 @@
 </footer>
 
 <script src="vendor/leaflet/leaflet.js"></script>
-<script src="app.js?v=20"></script>
-<script src="trips.js?v=20"></script>
+<script src="app.js?v=22"></script>
+<script src="trips.js?v=22"></script>
+<script src="guide.js?v=22"></script>
 </body>
 </html>

@@ -376,8 +376,10 @@ async function renderJourney() {
         ${x.walk ? `<br><span class="leave">${leave < 0 ? "⚠ tight — " + x.walk + " min walk to the stop" :
           leave === 0 ? "🚶 leave NOW (" + x.walk + " min walk)" :
           "🚶 leave in " + leave + " min (" + x.walk + " min walk)"}</span>` : ""}
-        ${x.lat ? ` · <a class="maps" target="_blank" rel="noopener"
-          href="https://www.google.com/maps/dir/?api=1&destination=${x.lat},${x.lon}&travelmode=walking">🗺 to the stop</a>` : ""}</div>
+        ${x.lat ? `<br><button class="linkbtn guidebtn" data-guide="${x.lat},${x.lon}"
+            data-guide-name="${esc(x.boardAt || "")}">🧭 Guide me to the stop</button>
+          · <a class="maps" target="_blank" rel="noopener"
+          href="https://www.google.com/maps/dir/?api=1&destination=${x.lat},${x.lon}&travelmode=walking">Google Maps</a>` : ""}</div>
       <button class="jtake" style="background:var(--${side})" data-take="${side}">
         ${side === "bus" ? "🚌 I’m taking this bus" : "🚆 I’m taking this train"}</button>
     </div>`;
