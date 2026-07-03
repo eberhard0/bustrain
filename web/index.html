@@ -10,7 +10,7 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
-<link rel="stylesheet" href="app.css?v=23">
+<link rel="stylesheet" href="app.css?v=24">
 </head>
 <body>
 <header>
@@ -20,33 +20,6 @@
 </header>
 
 <main>
-  <!-- HOME -->
-  <section id="tab-home" class="tab">
-    <div id="ios-howto" class="howto hidden">
-      <div class="howto-head">📲 <b>iPhone: get reminders even when the app is closed</b>
-        <button id="howto-close" class="linkbtn" style="margin-left:auto">✕</button></div>
-      <ol>
-        <li>Tap the <b>Share</b> button <span class="kbd">⬆︎</span> at the bottom of Safari</li>
-        <li>Scroll down and tap <b>Add to Home Screen</b>, then <b>Add</b></li>
-        <li>Open <b>BusTrain from the new icon</b> (not from Safari)</li>
-        <li>Set any reminder and tap <b>Allow</b> when asked about notifications</li>
-      </ol>
-      <div class="howto-foot">Needs iOS 16.4 or newer. Done once, alerts arrive like any
-        app's — screen locked, app closed. <a href="help.html">Full guide →</a></div>
-    </div>
-    <div id="notif-banner" class="alert hidden">
-      🔔 <span id="notif-msg">Enable notifications so reminders can reach you — even when
-        the app is closed.</span>
-      <button id="notif-enable" class="linkbtn">Enable</button>
-    </div>
-    <div id="next-reminder" class="alert amber hidden"></div>
-    <div id="home-cards"></div>
-    <div id="home-empty" class="empty hidden">
-      <p>🚏 No saved stops yet.</p>
-      <p>Find your bus stop or train station in <b>Search</b> or <b>Nearby</b> and tap ☆ to pin it here.</p>
-    </div>
-  </section>
-
   <!-- SEARCH = JOURNEY PLANNER -->
   <section id="tab-search" class="tab hidden">
     <div id="journey">
@@ -80,10 +53,28 @@
     <div id="nearby-results"></div>
   </section>
 
-  <!-- COMPARE -->
-  <section id="tab-compare" class="tab hidden">
-    <div class="alert" id="vs-status">⚖️ Bus vs train, side by side — pick a stop for each
-      (or use your location) and see which one to catch, walk time included.</div>
+  <!-- HOME = BUS VS TRAIN, PLACE-BASED -->
+  <section id="tab-compare" class="tab">
+    <div id="ios-howto" class="howto hidden">
+      <div class="howto-head">📲 <b>iPhone: get reminders even when the app is closed</b>
+        <button id="howto-close" class="linkbtn" style="margin-left:auto">✕</button></div>
+      <ol>
+        <li>Tap the <b>Share</b> button <span class="kbd">⬆︎</span> at the bottom of Safari</li>
+        <li>Scroll down and tap <b>Add to Home Screen</b>, then <b>Add</b></li>
+        <li>Open <b>BusTrain from the new icon</b> (not from Safari)</li>
+        <li>Set any reminder and tap <b>Allow</b> when asked about notifications</li>
+      </ol>
+      <div class="howto-foot">Needs iOS 16.4 or newer. Done once, alerts arrive like any
+        app's — screen locked, app closed. <a href="help.html">Full guide →</a></div>
+    </div>
+    <div id="notif-banner" class="alert hidden">
+      🔔 <span id="notif-msg">Enable notifications so reminders can reach you — even when
+        the app is closed.</span>
+      <button id="notif-enable" class="linkbtn">Enable</button>
+    </div>
+    <div id="next-reminder" class="alert amber hidden"></div>
+    <div class="alert" id="vs-status">🏠 Where are you going? We compare the next bus and
+      train from the stops nearest you — walking time included.</div>
     <button id="vs-locate" class="bigbtn">Pick nearest bus stop + station for me</button>
     <div class="vs-pickers">
       <div class="vs-pick bus" id="vs-pick-bus"><div class="k">🚌 BUS STOP</div>
@@ -91,9 +82,12 @@
       <div class="vs-pick train" id="vs-pick-train"><div class="k">🚆 TRAIN STATION</div>
         <div class="v" id="vs-train-name">Tap to choose…</div><div class="w" id="vs-train-walk"></div></div>
     </div>
-    <label class="lead-row">Going to:
-      <select id="vs-dest"><option value="">— choose destination station —</option></select>
-    </label>
+    <div class="jfield" style="margin-top:2px"><label>Going to</label>
+      <div class="jto-wrap">
+        <input id="vs-to-input" type="search" autocomplete="off"
+          placeholder="Where to? (Umi Jigoku, airport…)">
+        <div id="vs-sugg" class="sugg hidden"></div>
+      </div></div>
     <div id="vs-verdict" class="hidden"></div>
     <div class="vs-cols hidden" id="vs-cols">
       <div class="vs-col bus"><div class="col-head"><span>🚌 Bus</span><span id="vs-bus-head"></span></div>
@@ -181,10 +175,9 @@
 <div id="toast" class="toast hidden"></div>
 
 <nav>
-  <a data-tab="home" class="active"><span class="ico">🏠</span>Home</a>
+  <a data-tab="compare" class="active"><span class="ico">🏠</span>Home</a>
   <a data-tab="search"><span class="ico">🔍</span>Search</a>
   <a data-tab="nearby"><span class="ico">📍</span>Nearby</a>
-  <a data-tab="compare"><span class="ico">⚖️</span>Bus vs Train</a>
   <a data-tab="reminders"><span class="ico">👤</span>You<b id="rem-count" class="dot hidden"></b></a>
 </nav>
 
@@ -196,8 +189,8 @@
 </footer>
 
 <script src="vendor/leaflet/leaflet.js"></script>
-<script src="app.js?v=23"></script>
-<script src="trips.js?v=23"></script>
-<script src="guide.js?v=23"></script>
+<script src="app.js?v=24"></script>
+<script src="trips.js?v=24"></script>
+<script src="guide.js?v=24"></script>
 </body>
 </html>

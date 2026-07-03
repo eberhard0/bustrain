@@ -27,7 +27,7 @@ const state = {
   vs: JSON.parse(localStorage.getItem("bt_vs") || "{}"), // {bus:{id,walkMin}, train:{id,walkMin}}
   stopCache: {},
   geo: null,
-  tab: "home",
+  tab: "compare",
   detailId: null,
   detailDay: null,
   searchKind: "all",
@@ -170,38 +170,6 @@ function depRow(stop, d, nowMin, opts = {}) {
   </div>`;
 }
 
-/* ---------- home ---------- */
-async function renderHome() {
-  const n = jstNow(), nowMin = n.h * 60 + n.mi, tk = dateKey(n), yk = prevDateKey(n);
-  const wrap = $("#home-cards");
-  $("#home-empty").classList.toggle("hidden", state.saved.length > 0);
-  const cards = [];
-  for (const id of state.saved) {
-    const meta = stopMeta(id);
-    if (!meta) continue;
-    const stop = await loadStop(id);
-    const rows = upcoming(stop, 3, nowMin, tk, yk);
-    const feed = state.index.feeds[meta.feed];
-    let dist = "";
-    if (state.geo) {
-      const m = haversine(state.geo.lat, state.geo.lon, meta.lat, meta.lon);
-      dist = `<div class="dist">${fmtDist(m)}${m < 2500 ? ` · ${walkMin(m)} min walk` : ""}</div>`;
-    }
-    cards.push(`<div class="card" data-stop="${id}">
-      <div class="card-head" data-open="${id}">
-        <div class="mode ${meta.kind}">${meta.kind === "train" ? "🚆" : "🚌"}</div>
-        <div class="titles"><h2>${esc(meta.name)}</h2>
-          <div class="sub">${en(meta.name) ? esc(en(meta.name)) + " · " : ""}${feed.name_en}</div></div>${dist}
-      </div>
-      ${rows.length ? rows.map((d) => depRow(stop, d, nowMin)).join("")
-        : `<div class="dep"><div class="info"><div class="time">No more departures today.</div></div></div>`}
-      <button class="more" data-open="${id}">All departures ›</button>
-    </div>`);
-  }
-  wrap.innerHTML = cards.join("");
-  renderNextReminderBanner(nowMin, tk);
-}
-
 function renderNextReminderBanner(nowMin, tk) {
   const el = $("#next-reminder");
   const up = state.reminders.filter((r) => !r.fired && r.dateKey === tk && r.m >= nowMin)
@@ -273,8 +241,11 @@ async function renderNearby() {
   }
 }
 
-/* ---------- compare (bus vs train) ---------- */
+/* ---------- compare (bus vs train) — the home tab ---------- */
 async function renderCompare() {
+  const nb = jstNow();
+  renderNextReminderBanner(nb.h * 60 + nb.mi, dateKey(nb));
+  updateNotifBanner();
   const bus = state.vs.bus && stopMeta(state.vs.bus.id);
   const train = state.vs.train && stopMeta(state.vs.train.id);
   $("#vs-bus-name").textContent = bus ? `${bus.name} ${en(bus.name)}` : "Tap to choose…";
@@ -562,7 +533,6 @@ function toast(msg, ms = 2500) {
   clearTimeout(t._h); t._h = setTimeout(() => t.classList.add("hidden"), ms);
 }
 function refresh() {
-  if (state.tab === "home") renderHome();
   if (state.tab === "search") renderSearch();
   if (state.tab === "compare") renderCompare();
   if (state.tab === "reminders") {
@@ -673,16 +643,7 @@ function updateNotifBanner() {
 async function boot() {
   await loadIndex();
   bindEvents();
-  // default pins on first run: Beppu & Oita stations + Beppu Stn West bus stop
-  if (!localStorage.getItem("bt_saved")) {
-    const defaults = [];
-    for (const want of [["train", "別府駅"], ["train", "大分駅"], ["bus", "別府駅西口"], ["bus", "大分駅前"]]) {
-      const s = state.index.stops.find((x) => x.kind === want[0] && x.name === want[1]);
-      if (s) defaults.push(s.id);
-    }
-    state.saved = defaults; save();
-  }
-  showTab("home");
+  showTab("compare");
   setInterval(() => {
     const n = jstNow();
     $("#clock").textContent = `${String(n.h).padStart(2, "0")}:${String(n.mi).padStart(2, "0")}`;
@@ -696,7 +657,7 @@ async function boot() {
   ensureGpsWatch();
   ensurePush();
   if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("sw.js?v=23").catch(() => {});
+    navigator.serviceWorker.register("sw.js?v=24").catch(() => {});
     // when a new version takes over, reload once so users always run latest
     let reloaded = false;
     navigator.serviceWorker.addEventListener("controllerchange", () => {

@@ -18,8 +18,8 @@ const LINES = {
     "豊後清川", "緒方", "朝地", "豊後竹田", "宮地", "阿蘇", "立野", "肥後大津", "熊本"],
 };
 
-state.dest = localStorage.getItem("bt_dest") || "";
 state.destPlace = JSON.parse(localStorage.getItem("bt_destplace") || "null");
+state.vsPlace = JSON.parse(localStorage.getItem("bt_vsplace") || "null");
 state.user = null;
 state.history = [];
 state.corridors = null;
@@ -95,14 +95,17 @@ function nearestStationTo(lat, lon, excl) {
   return best;
 }
 
-/* pattern-based bus routing: any origin point -> any destination point */
-async function busViaPatterns(oLat, oLon, place, nowMin, tk, yk) {
+/* pattern-based bus routing: any origin point -> any destination point.
+   originOverride restricts boarding to specific stops (home-tab picked stop). */
+async function busViaPatterns(oLat, oLon, place, nowMin, tk, yk, originOverride) {
   const near = (lat, lon, radius, count) => state.index.stops
     .filter((s) => s.kind === "bus")
     .map((s) => ({ ...s, _d: haversine(lat, lon, s.lat, s.lon) }))
     .filter((s) => s._d <= radius)
     .sort((a, b) => a._d - b._d).slice(0, count);
-  const originStops = near(oLat, oLon, 700, 8);
+  const originStops = originOverride
+    ? originOverride.map((s) => ({ ...s, _d: haversine(oLat, oLon, s.lat, s.lon) }))
+    : near(oLat, oLon, 700, 8);
   const destStops = near(place.lat, place.lon, 600, 6);
   if (!originStops.length || !destStops.length) return null;
   const destByName = new Map(destStops.map((s) => [s.name, s]));
@@ -168,18 +171,28 @@ function originStation() {
   return t ? stationOf(t.name) : null;
 }
 
-function updateDestOptions() {
-  const sel = $("#vs-dest");
-  const o = originStation();
-  if (!o || !state.corridors) { sel.innerHTML = '<option value="">— pick a train station first —</option>'; return; }
-  const dests = Object.keys(state.corridors.pairs)
-    .filter((k) => k.startsWith(o + "|")).map((k) => k.split("|")[1]).sort();
-  if (!dests.length) {
-    sel.innerHTML = '<option value="">— destinations still loading, try again in a moment —</option>';
-    return;
-  }
-  sel.innerHTML = '<option value="">— choose destination station —</option>' +
-    dests.map((d) => `<option value="${d}" ${d === state.dest ? "selected" : ""}>${d} ${en(d)}</option>`).join("");
+/* shared place-search binding (home "Going to" + Search "To") */
+function bindPlaceSearch(inputSel, suggSel, onPick) {
+  const inp = $(inputSel), sugg = $(suggSel);
+  inp.addEventListener("input", () => {
+    const list = suggestPlaces(inp.value);
+    sugg.classList.toggle("hidden", !list.length);
+    sugg.innerHTML = list.map((p, i) => `<div class="sg" data-sg="${i}">
+      <span class="ic">${KIND_ICO[p.k] || "📍"}</span>
+      <div class="tx"><div class="jp">${esc(p.n)}</div>
+        <div class="enl">${esc(p.e || en(p.n) || "")}</div></div></div>`).join("");
+    sugg._list = list;
+  });
+  sugg.addEventListener("mousedown", (e) => {
+    const sg = e.target.closest("[data-sg]");
+    if (!sg) return;
+    const p = sugg._list[parseInt(sg.dataset.sg, 10)];
+    inp.value = `${p.n}${p.e ? " · " + p.e : ""}`;
+    sugg.classList.add("hidden");
+    onPick(p);
+  });
+  inp.addEventListener("blur", () => setTimeout(() => sugg.classList.add("hidden"), 250));
+  inp.addEventListener("focus", () => { if (inp.value) inp.select(); });
 }
 
 /* --- does this departure go toward dest? --- */
@@ -249,33 +262,63 @@ async function computeOptions(o, d) {
   return options;
 }
 
-/* --- verdict panel (Bus vs Train tab) --- */
+/* --- verdict panel (home tab): picked stops -> any PLACE --- */
 async function renderVerdict() {
   const box = $("#vs-verdict");
   await ensureCorridors();
-  const o = originStation(), d = state.dest;
-  updateDestOptions();
-  if (!o || !d || !state.vs.bus) { box.classList.add("hidden"); return; }
-  const options = await computeOptions(o, d);
-  if (!options || (!options.bus && !options.train)) { box.classList.add("hidden"); return; }
-  if (!options.train && !options.bus) {
-    box.className = "verdict"; box.classList.remove("hidden");
-    box.innerHTML = `No more departures toward <b>${d}</b> today on either mode.`;
+  const p = state.vsPlace;
+  const busPick = state.vs.bus && stopMeta(state.vs.bus.id);
+  const trainPick = state.vs.train && stopMeta(state.vs.train.id);
+  const inp = $("#vs-to-input");
+  if (p && inp && !inp.value) inp.value = `${p.n}${p.e ? " · " + p.e : ""}`;
+  if (!p || (!busPick && !trainPick)) { box.classList.add("hidden"); return; }
+  const n = jstNow(), nowMin = n.h * 60 + n.mi, tk = dateKey(n), yk = prevDateKey(n);
+
+  // train: picked station -> nearest covered station to the place + final walk
+  let train = null;
+  const o = originStation();
+  if (o) {
+    const s2 = nearestStationTo(p.lat, p.lon, o);
+    if (s2 && s2._d <= 4000) {
+      const co = await computeOptions(o, s2.name);
+      if (co && co.train) {
+        train = { ...co.train, alightName: s2.name + "駅", alightLat: s2.lat, alightLon: s2.lon,
+          finalWalk: walkMin(s2._d), finalDist: s2._d };
+        train.total = train.arr + train.finalWalk;
+      }
+    }
+  }
+  // bus: pattern routing from the picked stop's area (other poles of the
+  // same station square count too — the right bus may leave across the street)
+  let bus = null;
+  if (busPick) {
+    const area = state.index.stops
+      .filter((s) => s.kind === "bus" &&
+        haversine(busPick.lat, busPick.lon, s.lat, s.lon) <= 200)
+      .slice(0, 8);
+    bus = await busViaPatterns(busPick.lat, busPick.lon, p, nowMin, tk, yk,
+      area.length ? area : [busPick]);
+  }
+
+  box.className = "verdict"; box.classList.remove("hidden");
+  const pName = `${p.n} ${p.e || en(p.n) || ""}`.trim();
+  if (!bus && !train) {
+    box.innerHTML = `No more departures toward <b>${esc(pName)}</b> today from your picked stops.`;
+    state.lastOptions = null;
     return;
   }
-  const dName = `${d} ${en(d) || ""}`.trim();
   const line = (side, x) => x
-    ? `${side === "bus" ? "🚌" : "🚆"} <b>${fmtMin(x.dep)} → ~${fmtMin(x.arr)}</b> (${x.dur} min` +
-      `${x.walk ? ` + ${x.walk} min walk` : ""}) · ${x.fare ? "~¥" + x.fare : "fare n/a"} · ${esc(x.labelEn || x.label)}`
-    : `${side === "bus" ? "🚌" : "🚆"} no more today`;
-  const verdict = savingsNote(options.bus, options.train, esc(en(d) || d), false);
-  box.className = "verdict"; box.classList.remove("hidden");
-  box.innerHTML = `To <b>${esc(dName)}</b>:<br>${verdict}${verdict ? "<br>" : ""}${line("bus", options.bus)}<br>${line("train", options.train)}
+    ? `${side === "bus" ? "🚌" : "🚆"} <b>${fmtMin(x.dep)} → ~${fmtMin(x.total ?? x.arr)}</b> at ${esc(p.n)}
+       · get off ${esc(x.alightName || "")}${x.finalWalk ? ` + 🚶 ${x.finalWalk} min` : ""}
+       · ${x.fare ? "~¥" + x.fare : "fare n/a"}`
+    : `${side === "bus" ? "🚌" : "🚆"} no option today`;
+  const note = savingsNote(bus, train, esc(p.n), true);
+  box.innerHTML = `To <b>${esc(pName)}</b>:<br>${note}${note ? "<br>" : ""}${line("bus", bus)}<br>${line("train", train)}
     <div class="take">
-      ${options.bus ? '<button class="tb" data-take="bus">🚌 I’m taking the bus</button>' : ""}
-      ${options.train ? '<button class="tt" data-take="train">🚆 I’m taking the train</button>' : ""}
+      ${bus ? '<button class="tb" data-take="bus">🚌 I’m taking the bus</button>' : ""}
+      ${train ? '<button class="tt" data-take="train">🚆 I’m taking the train</button>' : ""}
     </div>`;
-  state.lastOptions = { o, d, options };
+  state.lastOptions = { o: o || (busPick ? busPick.name : ""), d: p.n, options: { bus, train } };
 }
 
 /* --- journey planner (Search tab) --- */
@@ -558,41 +601,34 @@ function repeatTrip(id) {
   const t = h.data;
   if (t.busStopId && stopMeta(t.busStopId)) state.vs.bus = { id: t.busStopId, walkMin: null, dist: "" };
   if (t.trainStopId && stopMeta(t.trainStopId)) state.vs.train = { id: t.trainStopId, walkMin: null, dist: "" };
-  state.dest = t.to; localStorage.setItem("bt_dest", state.dest);
+  const st = state.corridors?.stations[t.to];
+  const pl = placeIndex().find((x) => x.n === t.to) ||
+    (st ? { n: t.to, e: en(t.to), lat: st.lat, lon: st.lon, k: "station" } : null);
+  if (pl) {
+    state.vsPlace = pl;
+    localStorage.setItem("bt_vsplace", JSON.stringify(pl));
+    const inp = $("#vs-to-input");
+    if (inp) inp.value = `${pl.n}${pl.e ? " · " + pl.e : ""}`;
+  }
   save(); showTab("compare");
   toast(`↻ ${t.from} → ${t.to} loaded — pick your ride`);
 }
 
 /* --- events + init --- */
 function initTrips() {
-  $("#vs-dest").addEventListener("change", (e) => {
-    state.dest = e.target.value; localStorage.setItem("bt_dest", state.dest); renderVerdict();
+  bindPlaceSearch("#j-to-input", "#j-sugg", (p) => {
+    state.destPlace = p;
+    localStorage.setItem("bt_destplace", JSON.stringify(p));
+    renderJourney();
+  });
+  bindPlaceSearch("#vs-to-input", "#vs-sugg", (p) => {
+    state.vsPlace = p;
+    localStorage.setItem("bt_vsplace", JSON.stringify(p));
+    renderVerdict();
   });
   $("#j-from").addEventListener("change", (e) => {
     localStorage.setItem("bt_jfrom", e.target.value); renderJourney();
   });
-  const jin = $("#j-to-input"), sugg = $("#j-sugg");
-  jin.addEventListener("input", () => {
-    const list = suggestPlaces(jin.value);
-    sugg.classList.toggle("hidden", !list.length);
-    sugg.innerHTML = list.map((p, i) => `<div class="sg" data-sg="${i}">
-      <span class="ic">${KIND_ICO[p.k] || "📍"}</span>
-      <div class="tx"><div class="jp">${esc(p.n)}</div>
-        <div class="enl">${esc(p.e || en(p.n) || "")}</div></div></div>`).join("");
-    sugg._list = list;
-  });
-  sugg.addEventListener("mousedown", (e) => {
-    const sg = e.target.closest("[data-sg]");
-    if (!sg) return;
-    const p = sugg._list[parseInt(sg.dataset.sg, 10)];
-    state.destPlace = p;
-    localStorage.setItem("bt_destplace", JSON.stringify(p));
-    jin.value = `${p.n}${p.e ? " · " + p.e : ""}`;
-    sugg.classList.add("hidden");
-    renderJourney();
-  });
-  jin.addEventListener("blur", () => setTimeout(() => sugg.classList.add("hidden"), 250));
-  jin.addEventListener("focus", () => { if (jin.value) { jin.select(); } });
   document.body.addEventListener("click", (e) => {
     const take = e.target.closest("[data-take]");
     const rep = e.target.closest("[data-repeat]");

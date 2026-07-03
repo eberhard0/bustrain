@@ -65,9 +65,10 @@ async def flow(page, ctx, tag, shot):
     await page.click('nav a[data-tab="compare"]')
     await page.click("#vs-locate")
     await page.wait_for_timeout(2000)
-    opts = await page.locator("#vs-dest option").all_inner_texts()
-    if len(opts) > 1:
-        await page.select_option("#vs-dest", index=1)
+    await page.fill("#vs-to-input", "oita station")
+    await page.wait_for_timeout(700)
+    if await page.locator("#vs-sugg .sg").count():
+        await page.locator("#vs-sugg .sg").nth(0).dispatch_event("mousedown")
         await page.wait_for_timeout(1500)
     await shot("08-compare-verdict")
 
@@ -98,7 +99,7 @@ async def flow(page, ctx, tag, shot):
     await shot("11-you-history")
 
     # 12 home with pinned stops + reminder banner
-    await page.click('nav a[data-tab="home"]')
+    await page.click('nav a[data-tab="compare"]')
     await page.wait_for_timeout(1200)
     await shot("12-home-after-trip")
 

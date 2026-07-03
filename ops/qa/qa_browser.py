@@ -58,8 +58,11 @@ async def main():
         await page.screenshot(path=OUT / "05-compare.png")
 
         # destination verdict + account + trip logging
-        await page.select_option("#vs-dest", "大分")
-        await page.wait_for_timeout(1200)
+        await page.fill("#vs-to-input", "大分駅")
+        await page.wait_for_timeout(700)
+        if await page.locator("#vs-sugg .sg").count():
+            await page.locator("#vs-sugg .sg").nth(0).dispatch_event("mousedown")
+        await page.wait_for_timeout(1500)
         await page.screenshot(path=OUT / "08-compare-verdict.png")
 
         await page.click('nav a[data-tab="reminders"]')
@@ -83,7 +86,7 @@ async def main():
         await page.screenshot(path=OUT / "10-history.png")
 
         # set a reminder: open home, click first bell
-        await page.click('nav a[data-tab="home"]')
+        await page.click('nav a[data-tab="compare"]')
         await page.wait_for_timeout(800)
         bells = page.locator(".bell")
         if await bells.count():
@@ -93,7 +96,7 @@ async def main():
         await page.wait_for_timeout(500)
         await page.screenshot(path=OUT / "06-reminders.png")
 
-        await page.click('nav a[data-tab="home"]')
+        await page.click('nav a[data-tab="compare"]')
         await page.wait_for_timeout(800)
         await page.screenshot(path=OUT / "07-home-with-reminder.png")
 
