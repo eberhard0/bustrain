@@ -83,8 +83,16 @@ function suggestPlaces(q) {
     }
     if (s >= 0) scored.push([s + (p.k === "stop" ? 0.5 : 0), p]);
   }
-  scored.sort((a, b) => a[0] - b[0]);
-  return scored.slice(0, 8).map((x) => x[1]);
+  // same match quality -> nearest first (chains: offer the closest branch)
+  scored.sort((a, b) => {
+    if (a[0] !== b[0]) return a[0] - b[0];
+    if (!state.geo) return 0;
+    return haversine(state.geo.lat, state.geo.lon, a[1].lat, a[1].lon) -
+           haversine(state.geo.lat, state.geo.lon, b[1].lat, b[1].lon);
+  });
+  return scored.slice(0, 8).map((x) => state.geo
+    ? { ...x[1], _d: haversine(state.geo.lat, state.geo.lon, x[1].lat, x[1].lon) }
+    : x[1]);
 }
 function nearestStationTo(lat, lon, excl) {
   let best = null;
@@ -188,7 +196,8 @@ function bindPlaceSearch(inputSel, suggSel, onPick) {
     sugg.innerHTML = list.map((p, i) => `<div class="sg" data-sg="${i}">
       <span class="ic">${KIND_ICO[p.k] || "📍"}</span>
       <div class="tx"><div class="jp">${esc(p.n)}</div>
-        <div class="enl">${esc(p.e || en(p.n) || "")}</div></div></div>`).join("");
+        <div class="enl">${esc(p.e || en(p.n) || "")}${p._d != null
+          ? ` · ${fmtDist(p._d)} away` : ""}</div></div></div>`).join("");
     sugg._list = list;
   };
   inp.addEventListener("input", () => {
@@ -468,7 +477,7 @@ async function renderJourney() {
         <span class="assure">✓ Get off at <b>${esc(x.alightName)}</b> ${esc(en(x.alightName))}
           — the <b>${ordinal((x.stops ?? 0) + 1)} stop</b>, ~${fmtMin(x.arr)}</span><br>
         then 🚶 ${x.finalWalk} min walk (${fmtDist(x.finalDist)}) →
-        <b>arrive ${esc(place.n)} ~${fmtMin(x.total)}</b><br>
+        <b>arrive ${esc(placeName)} ~${fmtMin(x.total)}</b><br>
         ride ${x.dur} min${x.fare ? " · ~¥" + x.fare : ""}
         ${x.walk ? `<br><span class="leave">${leave < 0 ? "⚠ tight — " + x.walk + " min walk to the stop" :
           leave === 0 ? "🚶 leave NOW (" + x.walk + " min walk)" :
@@ -478,14 +487,14 @@ async function renderJourney() {
           · <a class="maps" target="_blank" rel="noopener"
           href="https://www.google.com/maps/dir/?api=1&destination=${x.lat},${x.lon}&travelmode=walking">Google Maps</a>` : ""}
         ${x.alightLat != null && place.lat != null ? `<br><button class="linkbtn guidebtn"
-            data-guide="${place.lat},${place.lon}" data-guide-name="${esc(place.n)}">
-            🧭 After you get off: walk me to ${esc(place.n)}</button>` : ""}</div>
+            data-guide="${place.lat},${place.lon}" data-guide-name="${esc(placeName)}">
+            🧭 After you get off: walk me to ${esc(placeName)}</button>` : ""}</div>
       <button class="jtake" style="background:var(--${side})" data-take="${side}">
         ${side === "bus" ? "🚌 I’m taking this bus" : "🚆 I’m taking this train"}</button>
     </div>`;
   };
   out.innerHTML =
-    (bus && train ? `<div class="jwin-note">${savingsNote(bus, train, esc(place.n), true)}</div>` : "") +
+    (bus && train ? `<div class="jwin-note">${savingsNote(bus, train, esc(placeName), true)}</div>` : "") +
     card("bus", bus) + card("train", train);
   drawJourneyMap("bus", bus, oLat, oLon, place);
   drawJourneyMap("train", train, oLat, oLon, place);
@@ -624,14 +633,13 @@ async function logTrip(mode) {
   const destSt = state.corridors?.stations[trip.to];
   const aLat = chosen.alightLat ?? (destSt ? destSt.lat : null);
   const aLon = chosen.alightLon ?? (destSt ? destSt.lon : null);
-  const placePt = state.destPlace && state.destPlace.n === lo.d
-    ? state.destPlace
-    : (destSt ? { n: lo.d, lat: destSt.lat, lon: destSt.lon } : null);
+  const placePt = [state.vsPlace, state.destPlace].find((pp) => pp && pp.n === lo.d) ||
+    (destSt ? { n: lo.d, e: en(lo.d), lat: destSt.lat, lon: destSt.lon } : null);
   const arrRem = { type: "arrive", stopName: chosen.alightName || trip.to,
     m: chosen.arr, lead: 3,
     r: chosen.label, h: `Get off at ${chosen.alightName || trip.to}`, kind: mode,
     dateKey: dateKey(n), fired: false, lat: aLat, lon: aLon,
-    placeName: placePt ? placePt.n : null,
+    placeName: placePt ? `${placePt.n}${placePt.e ? " " + placePt.e : ""}` : null,
     placeLat: placePt ? placePt.lat : null, placeLon: placePt ? placePt.lon : null };
   state.reminders.push(arrRem);
   save(); ensureNotifPermission(); renderReminders(); ensureGpsWatch();

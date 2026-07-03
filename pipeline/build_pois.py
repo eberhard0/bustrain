@@ -93,26 +93,32 @@ def main():
     for e in data["elements"]:
         t = e.get("tags", {})
         name = t.get("name")
-        if not name or name in seen:
-            continue
         lat = e.get("lat") or e.get("center", {}).get("lat")
         lon = e.get("lon") or e.get("center", {}).get("lon")
-        if lat is None:
+        if not name or lat is None:
             continue
-        seen.add(name)
+        # dedupe by name AND ~250m grid cell — chains (Starbucks, Joyfull…)
+        # keep one entry per branch, not one per brand
+        key = (name, round(lat * 400), round(lon * 400))
+        if key in seen:
+            continue
+        seen.add(key)
         en_name = t.get("name:en", "")
         if not en_name and HAS_KANA.search(name) and KANA_ONLY.match(name):
             en_name = kana_to_romaji(name)  # katakana shop names -> romaji
         pois.append({"n": name, "e": en_name, "lat": round(lat, 5),
                      "lon": round(lon, 5), "k": kind_of(t)})
-    by_name = {p["n"]: p for p in pois}
+    names_present = set()
     for n, e_name, lat, lon, k in MANUAL:
-        if n in by_name:
-            if not by_name[n]["e"]:
-                by_name[n]["e"] = e_name  # OSM had no English name — use ours
-        else:
+        hit = False
+        for p in pois:
+            if p["n"] == n:
+                hit = True
+                if not p["e"]:
+                    p["e"] = e_name  # OSM had no English name — use ours
+        if not hit:
             pois.append({"n": n, "e": e_name, "lat": lat, "lon": lon, "k": k})
-            seen.add(n)
+    names_present.update(p["n"] for p in pois)
     OUT.write_text(json.dumps({"pois": pois}, ensure_ascii=False, separators=(",", ":")),
                    encoding="utf-8")
     with_en = sum(1 for p in pois if p["e"])
