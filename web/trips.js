@@ -53,7 +53,8 @@ async function ensureCorridors() {
 
 /* ---------- place search (tourist destinations) ---------- */
 const KIND_ICO = { station: "🚉", stop: "🚏", onsen: "♨️", airport: "✈️", hospital: "🏥",
-  university: "🎓", mall: "🛍️", museum: "🖼️", ferry: "⛴️", sight: "📍" };
+  university: "🎓", mall: "🛍️", museum: "🖼️", ferry: "⛴️", sight: "📍",
+  food: "🍜", cafe: "☕", bar: "🍺", hotel: "🛏️", web: "🌐", pin: "📌", link: "🔗" };
 function placeIndex() {
   if (state._places) return state._places;
   const out = [];
@@ -171,24 +172,72 @@ function originStation() {
   return t ? stationOf(t.name) : null;
 }
 
-/* shared place-search binding (home "Going to" + Search "To") */
+/* shared place-search binding (home "Going to" + Search "To").
+   Three layers: local index -> Photon web geocoder fallback -> pasted
+   Google Maps link resolved server-side. All in the same dropdown. */
 function bindPlaceSearch(inputSel, suggSel, onPick) {
   const inp = $(inputSel), sugg = $(suggSel);
-  inp.addEventListener("input", () => {
-    const list = suggestPlaces(inp.value);
+  let timer = null, seq = 0;
+  const renderSugg = (list) => {
     sugg.classList.toggle("hidden", !list.length);
     sugg.innerHTML = list.map((p, i) => `<div class="sg" data-sg="${i}">
       <span class="ic">${KIND_ICO[p.k] || "📍"}</span>
       <div class="tx"><div class="jp">${esc(p.n)}</div>
         <div class="enl">${esc(p.e || en(p.n) || "")}</div></div></div>`).join("");
     sugg._list = list;
+  };
+  inp.addEventListener("input", () => {
+    const q = inp.value.trim();
+    clearTimeout(timer);
+    seq++; // invalidate any in-flight web lookup from a previous query
+    if (/^https?:\/\//i.test(q)) { // pasted a share link
+      renderSugg([{ k: "link", n: "Use this Google Maps place",
+        e: "Tap to set it as your destination", _url: q }]);
+      return;
+    }
+    const local = suggestPlaces(q);
+    renderSugg(local);
+    if (q.length >= 3 && local.length < 6) {
+      const mySeq = seq;
+      timer = setTimeout(async () => {
+        try {
+          const base = state.geo || { lat: 33.28, lon: 131.5 };
+          const r = await fetch("https://photon.komoot.io/api/?q=" + encodeURIComponent(q) +
+            `&lat=${base.lat}&lon=${base.lon}&limit=5&lang=en`,
+            { signal: AbortSignal.timeout(5000) });
+          const j = await r.json();
+          if (mySeq !== seq) return; // user kept typing
+          const web = (j.features || []).map((f) => ({
+            n: f.properties.name || q,
+            e: [f.properties.street, f.properties.city].filter(Boolean).join(", ") || "found on the map",
+            lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0], k: "web",
+          })).filter((w) => haversine(base.lat, base.lon, w.lat, w.lon) < 80000)
+            .filter((w) => !local.some((l) => l.n === w.n));
+          if (web.length) renderSugg(local.concat(web).slice(0, 9));
+        } catch { /* offline or geocoder down — local results stand */ }
+      }, 400);
+    }
   });
-  sugg.addEventListener("mousedown", (e) => {
+  sugg.addEventListener("mousedown", async (e) => {
     const sg = e.target.closest("[data-sg]");
     if (!sg) return;
     const p = sugg._list[parseInt(sg.dataset.sg, 10)];
-    inp.value = `${p.n}${p.e ? " · " + p.e : ""}`;
     sugg.classList.add("hidden");
+    if (p.k === "link") {
+      inp.value = "Resolving link…";
+      try {
+        const j = await apiJSON("/api/resolve?url=" + encodeURIComponent(p._url));
+        const place = { n: j.name || "Pinned place", e: "from Google Maps",
+          lat: j.lat, lon: j.lon, k: "pin" };
+        inp.value = place.n;
+        onPick(place);
+      } catch {
+        inp.value = "";
+        toast("Couldn't read that link — paste a Google Maps share link.", 4000);
+      }
+      return;
+    }
+    inp.value = `${p.n}${p.e ? " · " + p.e : ""}`;
     onPick(p);
   });
   inp.addEventListener("blur", () => setTimeout(() => sugg.classList.add("hidden"), 250));

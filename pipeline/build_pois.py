@@ -5,21 +5,29 @@ A tourist searches "Umi Jigoku" or "airport", not a bus-stop name; each POI's
 coordinates let the client pick the closest bus stop / station for them.
 """
 import json
+import re
 import time
 import urllib.request
 from pathlib import Path
+
+from build_names_en import kana_to_romaji
+
+KANA_ONLY = re.compile(r"^[ぁ-んァ-ヶー・\s0-9A-Za-z！!?？&＆'’\-]+$")
+HAS_KANA = re.compile(r"[ぁ-んァ-ヶ]")
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "web" / "data" / "pois.json"
 CACHE = ROOT / "data" / "raw" / "osm_pois.json"
 
 QUERY = """
-[out:json][timeout:60];
+[out:json][timeout:90];
 (
   nwr["tourism"~"attraction|museum|aquarium|zoo|theme_park|viewpoint|gallery"]["name"](33.10,131.35,33.40,131.80);
+  nwr["tourism"~"hotel|guest_house|hostel|ryokan"]["name"](33.10,131.35,33.40,131.80);
   nwr["natural"="hot_spring"]["name"](33.10,131.35,33.40,131.80);
   nwr["leisure"="park"]["name"~"公園"](33.15,131.40,33.35,131.75);
   nwr["amenity"~"hospital|university"]["name"](33.10,131.35,33.40,131.80);
+  nwr["amenity"~"restaurant|cafe|fast_food|food_court|bar|pub|izakaya"]["name"](33.15,131.40,33.40,131.75);
   nwr["aeroway"="aerodrome"]["name"](33.30,131.60,33.60,131.80);
   nwr["shop"="mall"]["name"](33.10,131.35,33.40,131.80);
   nwr["amenity"="ferry_terminal"]["name"](33.10,131.35,33.40,131.80);
@@ -57,12 +65,21 @@ def kind_of(tags):
         return "airport"
     if tags.get("natural") == "hot_spring":
         return "onsen"
-    if tags.get("amenity") == "hospital":
+    a = tags.get("amenity", "")
+    if a == "hospital":
         return "hospital"
-    if tags.get("amenity") == "university":
+    if a == "university":
         return "university"
-    if tags.get("amenity") == "ferry_terminal":
+    if a == "ferry_terminal":
         return "ferry"
+    if a in ("restaurant", "fast_food", "food_court", "izakaya"):
+        return "food"
+    if a == "cafe":
+        return "cafe"
+    if a in ("bar", "pub"):
+        return "bar"
+    if tags.get("tourism") in ("hotel", "guest_house", "hostel", "ryokan"):
+        return "hotel"
     if tags.get("shop") == "mall":
         return "mall"
     if tags.get("tourism") == "museum":
@@ -83,7 +100,10 @@ def main():
         if lat is None:
             continue
         seen.add(name)
-        pois.append({"n": name, "e": t.get("name:en", ""), "lat": round(lat, 5),
+        en_name = t.get("name:en", "")
+        if not en_name and HAS_KANA.search(name) and KANA_ONLY.match(name):
+            en_name = kana_to_romaji(name)  # katakana shop names -> romaji
+        pois.append({"n": name, "e": en_name, "lat": round(lat, 5),
                      "lon": round(lon, 5), "k": kind_of(t)})
     by_name = {p["n"]: p for p in pois}
     for n, e_name, lat, lon, k in MANUAL:

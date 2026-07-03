@@ -6,9 +6,12 @@ unless they register/log in. Run: uvicorn main:app --port 3021
 import asyncio
 import hashlib
 import json
+import re
 import secrets
 import sqlite3
 import time
+import urllib.parse
+import urllib.request
 from pathlib import Path
 
 from fastapi import FastAPI, Request, Response, HTTPException
@@ -187,6 +190,63 @@ def delete_history(item_id: int, request: Request):
     with db() as c:
         c.execute("DELETE FROM history WHERE id=? AND user_id=?", (item_id, user["id"]))
     return {"ok": True}
+
+
+### Google Maps share-link resolver: "paste the link a friend sent you".
+### Follows goo.gl redirects (allowlisted Google hosts only) and extracts
+### the place name + coordinates from the final Maps URL.
+_GHOSTS = re.compile(r"(^|\.)(google\.[a-z.]{2,6}|goo\.gl|maps\.app\.goo\.gl|app\.goo\.gl)$")
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *a, **k):
+        return None
+
+
+def _parse_maps_url(u: str):
+    dec = urllib.parse.unquote(u)
+    name = None
+    m = re.search(r"/maps/place/([^/@?]+)", dec)
+    if m:
+        name = m.group(1).replace("+", " ").strip()
+    for pat in (r"!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)",   # precise place pin
+                r"[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)",
+                r"@(-?\d+\.\d+),(-?\d+\.\d+)"):       # map viewport (last resort)
+        m = re.search(pat, dec)
+        if m:
+            return name, float(m.group(1)), float(m.group(2))
+    return name, None, None
+
+
+@app.get("/api/resolve")
+def resolve_link(url: str):
+    opener = urllib.request.build_opener(_NoRedirect())
+    for _ in range(6):
+        pu = urllib.parse.urlparse(url)
+        if pu.scheme != "https" or not _GHOSTS.search(pu.hostname or ""):
+            raise HTTPException(400, "Only Google Maps links are supported.")
+        name, lat, lon = _parse_maps_url(url)
+        if lat is not None:
+            return {"name": name, "lat": lat, "lon": lon}
+        # consent pages tuck the real target into ?continue=
+        qs = urllib.parse.parse_qs(pu.query)
+        if "continue" in qs:
+            url = qs["continue"][0]
+            continue
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            resp = opener.open(req, timeout=10)
+        except urllib.error.HTTPError as e:
+            if e.code in (301, 302, 303, 307, 308) and e.headers.get("Location"):
+                url = urllib.parse.urljoin(url, e.headers["Location"])
+                continue
+            raise HTTPException(422, "Couldn't follow that link.")
+        break
+    name, lat, lon = _parse_maps_url(url)
+    if lat is None:
+        raise HTTPException(422, "No location found in that link — open it in Google Maps "
+                                 "and share the place again.")
+    return {"name": name, "lat": lat, "lon": lon}
 
 
 ### Web Push — lets get-off/departure reminders reach an installed PWA

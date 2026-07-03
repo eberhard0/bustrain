@@ -19,9 +19,12 @@ don't know the stop names, you can't read the destination signs, you don't know
 whether the bus or the train is the better choice, and you have no idea when to get
 off. BusTrain answers exactly those questions:
 
-- **Type the place, not the stop.** "Umi Jigoku", "airport", "Kannawa" — a landmark
-  database (from OpenStreetMap) plus every station and stop, searchable in English
-  or Japanese. The app picks the right stop near you and near your destination.
+- **Type the place, not the stop.** "Umi Jigoku", "airport", a restaurant, your
+  hotel — 1,500+ local places from OpenStreetMap (sights, restaurants, cafés,
+  hotels, hospitals) plus every station and stop, searchable in English or
+  Japanese, with a worldwide web-geocoder fallback (Photon). You can even
+  **paste a Google Maps share link** a friend sent you — the app resolves it to a
+  destination. It then picks the right stop near you and near where you're going.
 - **Bus vs train, honestly compared.** Next departure of each toward your
   destination, door-to-door: walking to the stop, riding, walking the last stretch.
   With real fares: *"Take the train → arrive 17 min earlier, pay ¥140 more. Take the
