@@ -716,22 +716,40 @@ function initTrips() {
     if (c.password.length < 6) { err.textContent = "Password needs at least 6 characters."; return false; }
     return true;
   };
-  $("#acct-login").addEventListener("click", async () => {
+  const friendly = (msg) => /load failed|failed to fetch|network/i.test(msg)
+    ? "No connection to the server — check your internet and try again."
+    : msg;
+  const busy = async (btn, label, fn) => {
+    const orig = btn.textContent;
+    btn.disabled = true; btn.textContent = label;
+    try { await fn(); } finally { btn.disabled = false; btn.textContent = orig; }
+  };
+  $("#acct-login").addEventListener("click", (ev) => busy(ev.target, "Logging in…", async () => {
     err.textContent = "";
-    if (!validCreds(creds())) return;
+    if (!validCreds(creds())) { toast(err.textContent, 3500); return; }
     try {
       state.user = { username: (await apiJSON("/api/login", { method: "POST", body: JSON.stringify(creds()) })).username };
       await fetchHistory(); renderAccount(); renderHistory(); toast(`Welcome back, ${state.user.username}!`);
-    } catch (e2) { err.textContent = e2.message; }
-  });
-  $("#acct-register").addEventListener("click", async () => {
+    } catch (e2) {
+      err.textContent = /wrong username/i.test(e2.message)
+        ? "Wrong username or password. No account yet? Tap Register instead."
+        : friendly(e2.message);
+      toast(err.textContent, 4500);
+    }
+  }));
+  $("#acct-register").addEventListener("click", (ev) => busy(ev.target, "Creating…", async () => {
     err.textContent = "";
-    if (!validCreds(creds())) return;
+    if (!validCreds(creds())) { toast(err.textContent, 3500); return; }
     try {
       state.user = { username: (await apiJSON("/api/register", { method: "POST", body: JSON.stringify(creds()) })).username };
       renderAccount(); renderHistory(); toast(`Account created — trips will now be saved.`);
-    } catch (e2) { err.textContent = e2.message; }
-  });
+    } catch (e2) {
+      err.textContent = /taken/i.test(e2.message)
+        ? "That username is taken — if it's yours, tap Log in instead."
+        : friendly(e2.message);
+      toast(err.textContent, 4500);
+    }
+  }));
   $("#acct-logout").addEventListener("click", async () => {
     await apiJSON("/api/logout", { method: "POST" });
     state.user = null; state.history = [];
