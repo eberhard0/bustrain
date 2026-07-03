@@ -197,7 +197,8 @@ function bindPlaceSearch(inputSel, suggSel, onPick) {
       <span class="ic">${KIND_ICO[p.k] || "📍"}</span>
       <div class="tx"><div class="jp">${esc(p.n)}</div>
         <div class="enl">${esc(p.e || en(p.n) || "")}${p._d != null
-          ? ` · ${fmtDist(p._d)} away` : ""}</div></div></div>`).join("");
+          ? ` · ${fmtDist(p._d)}${p._d < 2500 ? ` · ~${walkMin(p._d)} min walk` : " away"}`
+          : ""}</div></div></div>`).join("");
     sugg._list = list;
   };
   inp.addEventListener("input", () => {
@@ -225,6 +226,8 @@ function bindPlaceSearch(inputSel, suggSel, onPick) {
             n: f.properties.name || q,
             e: [f.properties.street, f.properties.city].filter(Boolean).join(", ") || "found on the map",
             lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0], k: "web",
+            _d: state.geo ? haversine(state.geo.lat, state.geo.lon,
+              f.geometry.coordinates[1], f.geometry.coordinates[0]) : null,
           })).filter((w) => haversine(base.lat, base.lon, w.lat, w.lon) < 80000)
             .filter((w) => !local.some((l) => l.n === w.n));
           if (web.length) renderSugg(local.concat(web).slice(0, 9));
