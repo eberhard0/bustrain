@@ -261,11 +261,16 @@ async function renderCompare() {
   $("#vs-train-head").textContent = train.name;
 
   const n = jstNow(), nowMin = n.h * 60 + n.mi, tk = dateKey(n), yk = prevDateKey(n);
+  $("#vs-hint").classList.remove("hidden");
   for (const side of ["bus", "train"]) {
     const cfg = state.vs[side];
+    const meta = stopMeta(cfg.id);
     const stop = await loadStop(cfg.id);
     const rows = upcoming(stop, 5, nowMin, tk, yk);
     const w = cfg.walkMin || 0;
+    const guideAttrs = meta
+      ? `data-guide="${meta.lat},${meta.lon}" data-guide-name="${esc(meta.name)} ${esc(en(meta.name))}"`
+      : "";
     $(`#vs-${side}-list`).innerHTML = rows.map((d) => {
       const inMin = d.m - nowMin;
       const leaveIn = inMin - w;
@@ -275,8 +280,8 @@ async function renderCompare() {
         : "";
       const kind = side === "train" ? "train" : "bus";
       const enH = enHeadsign(d.h, kind);
-      return `<div class="vdep ${missed ? "missed" : countClass(inMin)}">
-        <div class="l1"><b>${fmtMin(d.m)}</b><span class="in">${inMin} min</span></div>
+      return `<div class="vdep ${missed ? "missed" : countClass(inMin)}" ${guideAttrs}>
+        <div class="l1"><b>${fmtMin(d.m)}</b><span class="in">${inMin} min 🧭</span></div>
         <div class="l2">${esc(kind === "train" ? enRoute(d.r) : d.r)} · ${esc(d.h)}</div>
         ${enH ? `<div class="l2 ename">${esc(enH)}</div>` : ""}
         ${leaveTxt ? `<div class="leave">${leaveTxt}</div>` : ""}
@@ -660,7 +665,7 @@ async function boot() {
   ensureGpsWatch();
   ensurePush();
   if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("sw.js?v=31").catch(() => {});
+    navigator.serviceWorker.register("sw.js?v=32").catch(() => {});
     // when a new version takes over, reload once so users always run latest
     let reloaded = false;
     navigator.serviceWorker.addEventListener("controllerchange", () => {

@@ -107,7 +107,8 @@ main { padding-top: 12px; }
   display: flex; justify-content: space-between; }
 .vs-col.bus .col-head { background: var(--bus); }
 .vs-col.train .col-head { background: var(--train); }
-.vdep { padding: 9px 10px; border-top: 1px solid var(--line); }
+.vdep { padding: 9px 10px; border-top: 1px solid var(--line); cursor: pointer; }
+.vdep:active { background: #eef2f7; }
 .vdep:first-of-type { border-top: none; }
 .vdep .l1 { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; }
 .vdep .l1 b { font-size: 16px; font-variant-numeric: tabular-nums; }
