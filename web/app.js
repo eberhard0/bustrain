@@ -353,13 +353,14 @@ function toggleReminder(payload) {
 }
 /* set a reminder if one doesn't already exist (one-gesture row taps) */
 function ensureReminder(payload) {
+  const tk = dateKey(jstNow());
   const exists = state.reminders.some((r) => r.stopId === payload.stopId &&
-    r.m === payload.m && r.h === payload.h && !r.fired);
+    r.m === payload.m && r.h === payload.h && r.dateKey === tk); // fired ones count too
   if (exists) return false;
   const meta = stopMeta(payload.stopId);
   if (!meta) return false;
   const rem = { ...payload, stopName: meta.name, kind: meta.kind, lead: state.lead,
-    dateKey: dateKey(jstNow()), fired: false };
+    dateKey: tk, fired: false };
   state.reminders.push(rem);
   save(); ensureNotifPermission(); pushSchedule(rem); renderReminders();
   return true;
@@ -681,7 +682,7 @@ async function boot() {
   ensureGpsWatch();
   ensurePush();
   if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("sw.js?v=33").catch(() => {});
+    navigator.serviceWorker.register("sw.js?v=34").catch(() => {});
     // when a new version takes over, reload once so users always run latest
     let reloaded = false;
     navigator.serviceWorker.addEventListener("controllerchange", () => {
