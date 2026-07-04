@@ -689,7 +689,7 @@ function initTrips() {
   });
   bindPlaceSearch("#vs-to-input", "#vs-sugg", (p) => {
     state.vsPlace = p;
-    renderVerdict();
+    renderCompare(); // re-render columns too — they filter by direction
   });
   $("#j-from").addEventListener("change", (e) => {
     localStorage.setItem("bt_jfrom", e.target.value); renderJourney();

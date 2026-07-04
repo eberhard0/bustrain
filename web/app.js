@@ -262,11 +262,36 @@ async function renderCompare() {
 
   const n = jstNow(), nowMin = n.h * 60 + n.mi, tk = dateKey(n), yk = prevDateKey(n);
   $("#vs-hint").classList.remove("hidden");
+  // when a destination is set, the columns only show departures going THAT way
+  const p = state.vsPlace;
+  let busDestNames = null, trainO = null, trainDest = null;
+  if (p && state.patterns && typeof nearestStationTo === "function") {
+    busDestNames = new Set(state.index.stops
+      .filter((s) => s.kind === "bus" && haversine(p.lat, p.lon, s.lat, s.lon) <= 600)
+      .map((s) => s.name));
+    trainO = originStation();
+    const s2 = trainO ? nearestStationTo(p.lat, p.lon, trainO) : null;
+    trainDest = s2 && s2._d <= 4000 ? s2.name : null;
+  }
+  $("#vs-hint").textContent = p
+    ? `🧭 Showing only departures toward ${p.n}${p.e ? " " + p.e : ""} — tap one to set its reminder and walk there`
+    : "🧭 Tap a departure to set its reminder and get walking directions to the stop";
   for (const side of ["bus", "train"]) {
     const cfg = state.vs[side];
     const meta = stopMeta(cfg.id);
     const stop = await loadStop(cfg.id);
-    const rows = upcoming(stop, 5, nowMin, tk, yk);
+    let rows = upcoming(stop, 40, nowMin, tk, yk);
+    if (side === "bus" && busDestNames) {
+      rows = rows.filter((d) => {
+        const pat = d.p && state.patterns[d.p];
+        if (!pat) return false;
+        for (let j = d.i + 1; j < pat.s.length; j++) if (busDestNames.has(pat.s[j])) return true;
+        return false;
+      });
+    } else if (side === "train" && trainO && trainDest && trainDest !== trainO) {
+      rows = rows.filter((d) => qualifiesTrain(d.h, trainO, trainDest));
+    }
+    rows = rows.slice(0, 5);
     const w = cfg.walkMin || 0;
     const guideAttrs = meta
       ? `data-guide="${meta.lat},${meta.lon}" data-guide-name="${esc(meta.name)} ${esc(en(meta.name))}"`
@@ -288,7 +313,7 @@ async function renderCompare() {
         ${enH ? `<div class="l2 ename">${esc(enH)}</div>` : ""}
         ${leaveTxt ? `<div class="leave">${leaveTxt}</div>` : ""}
       </div>`;
-    }).join("") || `<div class="vdep"><div class="l2">No more departures today.</div></div>`;
+    }).join("") || `<div class="vdep"><div class="l2">${p ? `No more departures toward ${esc(p.n)} from here today.` : "No more departures today."}</div></div>`;
   }
   if (typeof renderVerdict === "function") renderVerdict();
 }
@@ -297,9 +322,13 @@ async function vsAutoPick() {
   try {
     await getLocation();
     for (const kind of ["bus", "train"]) {
-      const best = state.index.stops.filter((s) => s.kind === kind)
+      const ranked = state.index.stops.filter((s) => s.kind === kind)
         .map((s) => ({ ...s, _d: haversine(state.geo.lat, state.geo.lon, s.lat, s.lon) }))
-        .sort((a, b) => a._d - b._d)[0];
+        .sort((a, b) => a._d - b._d);
+      // among poles at essentially the same corner, prefer the BUSY one —
+      // the nearest pole can be a 4-departures-a-day variant
+      const near = ranked.filter((s) => s._d <= ranked[0]._d + 120);
+      const best = near.sort((a, b) => b.n - a.n)[0] || ranked[0];
       state.vs[kind] = { id: best.id, walkMin: walkMin(best._d), dist: fmtDist(best._d) };
     }
     save();
@@ -682,7 +711,7 @@ async function boot() {
   ensureGpsWatch();
   ensurePush();
   if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("sw.js?v=35").catch(() => {});
+    navigator.serviceWorker.register("sw.js?v=37").catch(() => {});
     // when a new version takes over, reload once so users always run latest
     let reloaded = false;
     navigator.serviceWorker.addEventListener("controllerchange", () => {
