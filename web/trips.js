@@ -131,6 +131,7 @@ async function busViaPatterns(oLat, oLon, place, nowMin, tk, yk, originOverride)
     const walk = walkMin(os._d);
     for (const d of upcoming(stop, 300, nowMin, tk, yk)) {
       if (best && d.m >= best.total) break; // later departures can't beat current best
+      if (d.m < nowMin + walk - 1) continue; // leaves before you can reach the stop
       const pat = d.p && state.patterns[d.p];
       if (!pat) continue;
       // check EVERY dest-area stop this ride passes — the first match is not
@@ -297,7 +298,10 @@ async function computeOptions(o, d) {
     const tmeta = state.index.stops.find((s) => s.kind === "train" && s.name === o + "駅");
     if (tmeta) {
       const stop = await loadStop(tmeta.id);
-      const rows = upcoming(stop, 40, nowMin, tk, yk).filter((r) => qualifiesTrain(r.h, o, d));
+      const tWalk = (state.vs.train?.id === tmeta.id && state.vs.train.walkMin) ||
+        geoWalk(tmeta.lat, tmeta.lon);
+      const rows = upcoming(stop, 40, nowMin, tk, yk)
+        .filter((r) => qualifiesTrain(r.h, o, d) && r.m >= nowMin + tWalk - 1);
       const build = (nx) => {
         if (!nx) return null;
         const isExp = nx.r.startsWith("特急");
@@ -371,18 +375,41 @@ async function renderVerdict() {
 
   box.className = "verdict"; box.classList.remove("hidden");
   const pName = `${p.n} ${p.e || en(p.n) || ""}`.trim();
+  let widerNote = "";
+  if (!bus && !train && state.geo) {
+    // nothing from the picked stops — offer what a short walk unlocks
+    bus = await busViaPatterns(state.geo.lat, state.geo.lon, p, nowMin, tk, yk);
+    const o2 = nearestStationTo(state.geo.lat, state.geo.lon, null);
+    if (o2) {
+      const s2 = nearestStationTo(p.lat, p.lon, o2.name);
+      if (s2 && s2._d <= 4000 && s2.name !== o2.name) {
+        const co = await computeOptions(o2.name, s2.name);
+        if (co && co.train) {
+          train = { ...co.train, alightName: s2.name + "駅", alightLat: s2.lat, alightLon: s2.lon,
+            finalWalk: walkMin(s2._d), finalDist: s2._d };
+          train.total = train.arr + train.finalWalk;
+        }
+      }
+    }
+    if (bus || train) {
+      widerNote = `Nothing catchable from your picked stops — but a walk unlocks these:<br>`;
+    }
+  }
   if (!bus && !train) {
-    box.innerHTML = `No more departures toward <b>${esc(pName)}</b> today from your picked stops.`;
+    box.innerHTML = `No more departures toward <b>${esc(pName)}</b> today from your picked
+      stops — and nothing reachable on foot nearby either. Try the <b>Search</b> tab for
+      the full picture, or check tomorrow's first departures in a stop's timetable.`;
     state.lastOptions = null;
     return;
   }
   const line = (side, x) => x
     ? `${side === "bus" ? "🚌" : "🚆"} <b>${fmtMin(x.dep)} → ~${fmtMin(x.total ?? x.arr)}</b> at ${esc(p.n)}
+       ${x.walk ? `· 🚶 ${x.walk} min to ${esc(x.boardAt || "the stop")} ${esc(en(x.boardAt) || "")}` : ""}
        · get off ${esc(x.alightName || "")} ${esc(en(x.alightName) || "")}${x.finalWalk ? ` + 🚶 ${x.finalWalk} min` : ""}
        · ${x.fare ? "~¥" + x.fare : "fare n/a"}`
     : `${side === "bus" ? "🚌" : "🚆"} no option today`;
   const note = savingsNote(bus, train, esc(p.n), true);
-  box.innerHTML = `To <b>${esc(pName)}</b>:<br>${note}${note ? "<br>" : ""}${line("bus", bus)}<br>${line("train", train)}
+  box.innerHTML = `To <b>${esc(pName)}</b>:<br>${widerNote}${note}${note ? "<br>" : ""}${line("bus", bus)}<br>${line("train", train)}
     <div class="take">
       ${bus ? '<button class="tb" data-take="bus">🚌 I’m taking the bus</button>' : ""}
       ${train ? '<button class="tt" data-take="train">🚆 I’m taking the train</button>' : ""}
