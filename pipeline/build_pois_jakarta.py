@@ -33,7 +33,7 @@ MANUAL = [
     ("Masjid Istiqlal", "Istiqlal Mosque", -6.1699, 106.8309, "sight"),
     ("Taman Mini Indonesia Indah", "TMII", -6.3025, 106.8952, "sight"),
     ("Ancol Dreamland", "Taman Impian Jaya Ancol", -6.1226, 106.8306, "sight"),
-    ("Kebun Binatang Ragunan", "Ragunan Zoo", -6.3124, 106.8201, "sight"),
+    ("Kebun Binatang Ragunan", "Ragunan Zoo (main gate)", -6.3053, 106.8203, "sight"),
     ("Grand Indonesia", "Grand Indonesia Mall", -6.1952, 106.8218, "mall"),
     ("Sarinah", "Sarinah Mall", -6.1870, 106.8241, "mall"),
     ("Gelora Bung Karno", "GBK Stadium", -6.2186, 106.8022, "sight"),

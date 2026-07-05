@@ -74,6 +74,7 @@ async function loadIndex() {
   state.index = await r.json();
   state.names = await rn.json().catch(() => null);
   $("#data-date").textContent = `Data built ${state.index.generated}.`;
+  if (state.cityMeta.attribution) $("#attribution").textContent = state.cityMeta.attribution;
 }
 function switchCity(id) {
   localStorage.setItem("bt_city", id);
@@ -361,6 +362,12 @@ async function vsAutoPick() {
   try {
     await getLocation();
     const kinds = state.cityMeta.train ? ["bus", "train"] : ["bus"];
+    const cm = state.cityMeta;
+    if (haversine(state.geo.lat, state.geo.lon, cm.lat, cm.lon) > 60000) {
+      $("#vs-status").textContent = `📍 You seem far from ${cm.name} — tap the city name`
+        + ` in the header to switch cities, or pick stops manually below.`;
+      return;
+    }
     for (const kind of kinds) {
       const ranked = state.index.stops.filter((s) => s.kind === kind)
         .map((s) => ({ ...s, _d: haversine(state.geo.lat, state.geo.lon, s.lat, s.lon) }))
@@ -369,7 +376,8 @@ async function vsAutoPick() {
       // the nearest pole can be a 4-departures-a-day variant
       const near = ranked.filter((s) => s._d <= ranked[0]._d + 120);
       const best = near.sort((a, b) => b.n - a.n)[0] || ranked[0];
-      state.vs[kind] = { id: best.id, walkMin: walkMin(best._d), dist: fmtDist(best._d) };
+      state.vs[kind] = { id: best.id,
+        walkMin: best._d < 2500 ? walkMin(best._d) : null, dist: fmtDist(best._d) };
     }
     save();
     $("#vs-status").textContent = "⚖️ Nearest options — walk time is already factored into “leave in”. ";
@@ -609,7 +617,8 @@ async function renderDetail() {
   for (const row of raw) {
     if (row.length === 7) {
       const [s0, e0, hw, r, h] = row;
-      rows.push({ freq: true, s: s0 % 1440, e: e0 % 1440, step: Math.max(1, Math.round(hw / 60)), r, h });
+      rows.push({ freq: true, s: s0 % 1440, e: e0 % 1440, nextDay: e0 >= 1440,
+        step: Math.max(1, Math.round(hw / 60)), r, h });
     } else {
       const [m, r, h] = row;
       rows.push({ m: m % 1440, r, h });
@@ -620,7 +629,7 @@ async function renderDetail() {
     ? `<div class="dep"><span class="${pillClass(d.r, stop.kind)}">${esc(pillText(d.r, stop.kind))}</span>
         <div class="info"><div class="dest">${esc(d.h)}</div>
           ${enHeadsign(d.h, stop.kind) ? `<div class="ename">${esc(enHeadsign(d.h, stop.kind))}</div>` : ""}
-          <div class="time">${fmtMin(d.s)}–${fmtMin(d.e)} · every ~${d.step} min</div></div></div>`
+          <div class="time">${fmtMin(d.s)}–${fmtMin(d.e)}${d.nextDay ? " (next day)" : ""} · every ~${d.step} min</div></div></div>`
     : depRow(stop, d, nowMin, { past: isToday && d.m < nowMin })).join("") ||
     `<div class="empty"><p>No departures for this day type.</p></div>`;
   const firstUp = rows.findIndex((d) => !(isToday && d.m < nowMin));
@@ -780,7 +789,7 @@ async function boot() {
   ensureGpsWatch();
   ensurePush();
   if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("sw.js?v=40").catch(() => {});
+    navigator.serviceWorker.register("sw.js?v=45").catch(() => {});
     // when a new version takes over, reload once so users always run latest
     let reloaded = false;
     navigator.serviceWorker.addEventListener("controllerchange", () => {

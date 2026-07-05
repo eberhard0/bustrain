@@ -24,7 +24,7 @@ async def flow(page, ctx, tag, shot):
 
     # 01 fresh home (empty state): wipe storage first
     await page.goto(URL, wait_until="networkidle")
-    await page.evaluate("localStorage.clear()")
+    await page.evaluate("localStorage.clear(); localStorage.setItem('bt_city','beppu_oita')")
     await page.reload(wait_until="networkidle")
     await page.wait_for_timeout(1800)
     await shot("01-home-default")
@@ -106,6 +106,62 @@ async def flow(page, ctx, tag, shot):
     return errors, bad
 
 
+async def flow_jakarta(page, ctx, tag, shot):
+    """Jakarta parity pass: same journey, columns, detail, guide checks."""
+    errors = []
+    page.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    bad = []
+    page.on("response", lambda r: bad.append(f"{r.status} {r.url}")
+            if r.status >= 400 and "127.0.0.1" in r.url else None)
+
+    await ctx.set_geolocation({"latitude": -6.1754, "longitude": 106.8272})  # Monas
+    await page.goto(URL, wait_until="networkidle")
+    await page.evaluate("localStorage.clear(); localStorage.setItem('bt_city','jakarta');"
+                        "localStorage.setItem('bt_howto_done','1'); state.geo = null")
+    await page.wait_for_timeout(1500)  # let any cached geo fix age out
+    await page.reload(wait_until="networkidle")
+    await page.wait_for_timeout(1800)
+    await shot("20-jkt-home")
+
+    await page.click("#vs-locate")
+    await page.wait_for_timeout(2500)
+    await page.fill("#vs-to-input", "kota tua")
+    await page.wait_for_timeout(900)
+    if await page.locator("#vs-sugg .sg").count():
+        await page.locator("#vs-sugg .sg").nth(0).dispatch_event("mousedown")
+        await page.wait_for_timeout(4000)
+    await shot("21-jkt-verdict")
+
+    # tap a departure row -> walking guide (direction clarity)
+    rows = page.locator("#vs-bus-list .vdep[data-guide]")
+    if await rows.count():
+        await rows.first.click()
+        await page.wait_for_timeout(4000)
+        await shot("22-jkt-guide")
+        await page.click("#guide-close")
+
+    # journey planner
+    await page.click('nav a[data-tab="search"]')
+    await page.wait_for_timeout(2000)
+    await page.fill("#j-to-input", "monas")
+    await page.wait_for_timeout(900)
+    if await page.locator("#j-sugg .sg").count():
+        await page.locator("#j-sugg .sg").nth(0).dispatch_event("mousedown")
+        await page.wait_for_timeout(4500)
+    await shot("23-jkt-journey")
+
+    # stop detail with frequency rows
+    await page.click('nav a[data-tab="nearby"]')
+    await page.click("#nearby-btn")
+    await page.wait_for_timeout(1500)
+    await page.click("#nearby-results .row >> nth=0")
+    await page.wait_for_timeout(1200)
+    await shot("24-jkt-detail")
+    await page.click("#detail-close")
+    return errors, bad
+
+
 async def main():
     async with async_playwright() as p:
         report = {}
@@ -123,7 +179,9 @@ async def main():
             async def shot(name, page=page, engine=engine):
                 await page.screenshot(path=OUT / f"{engine}-{name}.png")
 
-            report[engine] = await flow(page, ctx, engine, shot)
+            e1, b1 = await flow(page, ctx, engine, shot)
+            e2, b2 = await flow_jakarta(page, ctx, engine, shot)
+            report[engine] = (e1 + e2, b1 + b2)
             await browser.close()
 
         ok = True

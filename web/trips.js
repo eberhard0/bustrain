@@ -49,9 +49,12 @@ async function loadCorridors() {
   state._places = null; // rebuild place index with whatever arrived
 }
 async function ensureCorridors() {
-  if (state.corridors && Object.keys(state.corridors.pairs || {}).length) return true;
+  const ready = () => state.corridors &&
+    Object.keys(state.patterns || {}).length > 0 &&
+    (!state.cityMeta.train || Object.keys(state.corridors.pairs || {}).length > 0);
+  if (ready()) return true;
   await loadCorridors(); // retry — e.g. a dropped LTE fetch on first load
-  return Object.keys(state.corridors.pairs || {}).length > 0;
+  return ready();
 }
 
 /* ---------- place search (tourist destinations) ---------- */
@@ -117,8 +120,8 @@ async function busViaPatterns(oLat, oLon, place, nowMin, tk, yk, originOverride)
     .sort((a, b) => a._d - b._d).slice(0, count);
   const originStops = originOverride
     ? originOverride.map((s) => ({ ...s, _d: haversine(oLat, oLon, s.lat, s.lon) }))
-    : near(oLat, oLon, 700, 8);
-  const destStops = near(place.lat, place.lon, 600, 6);
+    : near(oLat, oLon, 900, 10); // metro-scale stop spacing
+  const destStops = near(place.lat, place.lon, 900, 6); // big-city stop spacing
   if (!originStops.length || !destStops.length) return null;
   const destByName = new Map(destStops.map((s) => [s.name, s]));
   // a candidate wins on clearly-earlier arrival; on near-ties (≤3 min) the one
@@ -493,8 +496,17 @@ async function renderJourney() {
 
   const placeName = `${place.n}${place.e ? " " + place.e : en(place.n) ? " " + en(place.n) : ""}`;
   if (!bus && !train) {
-    out.innerHTML = `<div class="empty"><p>No more bus or train departures toward
-      <b>${esc(placeName)}</b> today (or it's outside the covered area).</p></div>`;
+    // any direct ride at ALL today, from the first departure? -> timing vs structure
+    const anyToday = await busViaPatterns(oLat, oLon, place, 0, tk, yk);
+    const gmaps = `https://www.google.com/maps/dir/?api=1&origin=${oLat},${oLon}` +
+      `&destination=${place.lat},${place.lon}&travelmode=transit`;
+    out.innerHTML = `<div class="empty"><p>${anyToday
+      ? `The last direct ride toward <b>${esc(placeName)}</b> already left today —
+         the first tomorrow leaves around <b>${fmtMin(anyToday.dep)}</b>.`
+      : `No single bus connects here to <b>${esc(placeName)}</b> — that trip needs a
+         transfer, which BusTrain doesn't route yet.`}</p>
+      <p><a class="maps" target="_blank" rel="noopener" href="${gmaps}">
+        🗺 Open a multi-leg route in Google Maps</a></p></div>`;
     return;
   }
   state.lastOptions = { o, d: place.n, options: { bus, train } };
@@ -621,12 +633,12 @@ function renderHistory() {
     const t = h.data, dtme = new Date(h.ts * 1000).toLocaleString("ja-JP",
       { timeZone: "Asia/Tokyo", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
     const alt = t.altArr != null
-      ? ` · alt ${t.altMode === "bus" ? "🚌" : "🚆"} would arrive ${fmtMin(t.altArr)}${t.altFare ? " ~" + fmtFare(t.altFare) : ""}`
+      ? ` · alt ${t.altMode === "bus" ? "🚌" : "🚆"} would arrive ${fmtMin(t.altArr)}${t.altFare ? ` ~${t.cur || "¥"}${Number(t.altFare).toLocaleString("en-US")}` : ""}`
       : "";
     return `<div class="hist-row">
       <div class="l1"><span>${t.mode === "bus" ? "🚌" : "🚆"} ${esc(t.from)} ${esc(en(t.from))}
         → ${esc(t.to)} ${esc(en(t.to))}</span>
-        <span>${t.fare ? "~" + fmtFare(t.fare) : ""}</span></div>
+        <span>${t.fare ? `~${t.cur || "¥"}${Number(t.fare).toLocaleString("en-US")}` : ""}</span></div>
       <div class="l2">${dtme} · dep ${fmtMin(t.dep)} → arr ~${fmtMin(t.arr)}${alt}</div>
       <div class="actions">
         <button class="linkbtn" data-repeat="${h.id}">↻ Repeat this trip</button>
@@ -634,10 +646,11 @@ function renderHistory() {
       </div></div>`;
   }).join("");
 
-  // savings: chosen vs alternative across all logged trips
+  // savings: chosen vs alternative — same-currency trips only (no ¥+Rp sums)
   let yen = 0, mins = 0, nBoth = 0;
   for (const h of trips) {
     const t = h.data;
+    if ((t.cur || "¥") !== CUR) continue;
     if (t.altArr == null) continue;
     nBoth++;
     if (t.altFare && t.fare) yen += t.altFare - t.fare;
@@ -659,7 +672,7 @@ async function logTrip(mode) {
   const chosen = opts[mode], alt = opts[mode === "bus" ? "train" : "bus"];
   if (!chosen) return;
   const trip = {
-    from: lo.o, to: lo.d, mode,
+    from: lo.o, to: lo.d, mode, city: state.city, cur: CUR,
     dep: chosen.dep, arr: chosen.arr, fare: chosen.fare || null,
     altMode: mode === "bus" ? "train" : "bus",
     altDep: alt ? alt.dep : null, altArr: alt ? alt.arr : null, altFare: alt ? alt.fare : null,
@@ -700,6 +713,11 @@ function repeatTrip(id) {
   const h = state.history.find((x) => x.id === Number(id));
   if (!h) return;
   const t = h.data;
+  if (t.city && t.city !== state.city) {
+    const c = state.cities.find((x) => x.id === t.city);
+    toast(`That trip is in ${c ? c.name : t.city} — switch city (tap the name in the header) first.`, 5000);
+    return;
+  }
   if (t.busStopId && stopMeta(t.busStopId)) state.vs.bus = { id: t.busStopId, walkMin: null, dist: "" };
   if (t.trainStopId && stopMeta(t.trainStopId)) state.vs.train = { id: t.trainStopId, walkMin: null, dist: "" };
   const st = state.corridors?.stations[t.to];
