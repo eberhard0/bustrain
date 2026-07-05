@@ -199,6 +199,34 @@ async def flow_tokyo(page, ctx, tag, shot):
     return errors, bad
 
 
+async def flow_nagoya(page, ctx, tag, shot):
+    errors = []
+    page.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    bad = []
+    page.on("response", lambda r: bad.append(f"{r.status} {r.url}")
+            if r.status >= 400 and "127.0.0.1" in r.url else None)
+    await ctx.set_geolocation({"latitude": 35.1709, "longitude": 136.8815})  # Nagoya Sta.
+    await page.goto(URL, wait_until="networkidle")
+    await page.evaluate("localStorage.clear(); localStorage.setItem('bt_city','nagoya');"
+                        "localStorage.setItem('bt_howto_done','1'); state.geo = null")
+    await page.wait_for_timeout(1500)
+    await page.reload(wait_until="networkidle")
+    await page.wait_for_timeout(2000)
+    await page.click("#vs-locate")
+    await page.wait_for_timeout(3000)
+    await shot("40-nagoya-home")
+    await page.fill("#vs-to-input", "nagoya castle")
+    await page.wait_for_timeout(1000)
+    if await page.locator("#vs-sugg .sg").count():
+        texts = await page.locator("#vs-sugg .sg").all_inner_texts()
+        idx = next((i for i, t in enumerate(texts) if "名古屋城" in t), 0)
+        await page.locator("#vs-sugg .sg").nth(idx).dispatch_event("mousedown")
+        await page.wait_for_timeout(5500)
+    await shot("41-nagoya-verdict")
+    return errors, bad
+
+
 async def main():
     async with async_playwright() as p:
         report = {}
@@ -219,7 +247,8 @@ async def main():
             e1, b1 = await flow(page, ctx, engine, shot)
             e2, b2 = await flow_jakarta(page, ctx, engine, shot)
             e3, b3 = await flow_tokyo(page, ctx, engine, shot)
-            report[engine] = (e1 + e2 + e3, b1 + b2 + b3)
+            e4, b4 = await flow_nagoya(page, ctx, engine, shot)
+            report[engine] = (e1 + e2 + e3 + e4, b1 + b2 + b3 + b4)
             await browser.close()
 
         ok = True

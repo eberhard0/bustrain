@@ -102,6 +102,7 @@ GTFS input: download the three Ōita feeds from the [Ōita open-data catalog
 | Beppu & Ōita, Japan | Ōita Pref. GTFS-JP ×3 + JR Kyushu timetables | bus + train, ¥ |
 | Jakarta, Indonesia | TransJakarta GTFS + MRT/LRT headway model | bus + rail, Rp |
 | Tokyo, Japan | Toei Subway/Bus GTFS (ODPT public) + Metro/Yamanote headway model | bus + rail, ¥ |
+| Nagoya, Japan | City Bus GTFS-JP (city open data) + subway headway model | bus + rail, ¥ |
 
 The app auto-selects the city from your phone's timezone on first visit; tap the
 city name in the header to switch. Each city lives in `web/data/<city>/` and is
