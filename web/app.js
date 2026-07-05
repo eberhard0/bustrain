@@ -68,6 +68,7 @@ async function loadIndex() {
   CUR = state.cityMeta.cur;
   if (state.vs && state.vs.city !== id) state.vs = { city: id }; // picks are per-city
   document.body.classList.toggle("no-train", !state.cityMeta.train);
+  document.body.classList.toggle("no-bus", state.cityMeta.bus === false);
   $("#hdr-sub").innerHTML = `${state.cityMeta.name} \u25be`;
   const [r, rn] = await Promise.all([
     fetch(cityPath("index.json")), fetch(cityPath("names_en.json"))]);
@@ -326,10 +327,12 @@ async function renderCompare() {
   $("#vs-train-walk").textContent = train && state.vs.train.walkMin != null
     ? `${state.vs.train.dist} · ~${state.vs.train.walkMin} min walk` : "";
   const cols = $("#vs-cols");
-  const ready = state.cityMeta.train ? (bus && train) : !!bus;
+  const hasBus = state.cityMeta.bus !== false;
+  const ready = (hasBus ? bus : true) && (state.cityMeta.train ? train : true) &&
+    (bus || train);
   if (!ready) { cols.classList.add("hidden"); $("#vs-hint").classList.add("hidden"); return; }
   cols.classList.remove("hidden");
-  $("#vs-bus-head").textContent = bus.name.length > 9 ? bus.name.slice(0, 9) + "…" : bus.name;
+  if (bus) $("#vs-bus-head").textContent = bus.name.length > 9 ? bus.name.slice(0, 9) + "…" : bus.name;
   if (train) $("#vs-train-head").textContent = train.name;
 
   const n = jstNow(), nowMin = n.h * 60 + n.mi, tk = dateKey(n), yk = prevDateKey(n);
@@ -354,7 +357,10 @@ async function renderCompare() {
     ? `🧭 Showing only departures toward ${p.n}${p.e ? " " + p.e : ""} — tap one to set its reminder and walk there`
     : "🧭 Tap a departure to set its reminder and get walking directions to the stop")
     + " · scheduled times, no live delays" + live;
-  for (const side of (state.cityMeta.train ? ["bus", "train"] : ["bus"])) {
+  const sides = [];
+  if (state.cityMeta.bus !== false) sides.push("bus");
+  if (state.cityMeta.train) sides.push("train");
+  for (const side of sides) {
     const cfg = state.vs[side];
     const meta = stopMeta(cfg.id);
     const stop = await loadStop(cfg.id);
@@ -412,7 +418,9 @@ async function vsAutoPick() {
   $("#vs-status").textContent = "📍 Locating…";
   try {
     await getLocation();
-    const kinds = state.cityMeta.train ? ["bus", "train"] : ["bus"];
+    const kinds = [];
+    if (state.cityMeta.bus !== false) kinds.push("bus");
+    if (state.cityMeta.train) kinds.push("train");
     const cm = state.cityMeta;
     if (haversine(state.geo.lat, state.geo.lon, cm.lat, cm.lon) > 60000) {
       $("#vs-status").textContent = `📍 You seem far from ${cm.name} — tap the city name`
@@ -841,7 +849,7 @@ async function boot() {
   ensureGpsWatch();
   ensurePush();
   if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("sw.js?v=59").catch(() => {});
+    navigator.serviceWorker.register("sw.js?v=62").catch(() => {});
     // when a new version takes over, reload once so users always run latest
     let reloaded = false;
     navigator.serviceWorker.addEventListener("controllerchange", () => {

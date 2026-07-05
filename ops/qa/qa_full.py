@@ -227,6 +227,35 @@ async def flow_nagoya(page, ctx, tag, shot):
     return errors, bad
 
 
+async def flow_fukuoka(page, ctx, tag, shot):
+    errors = []
+    page.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    bad = []
+    page.on("response", lambda r: bad.append(f"{r.status} {r.url}")
+            if r.status >= 400 and "127.0.0.1" in r.url else None)
+    await ctx.set_geolocation({"latitude": 33.5902, "longitude": 130.4207})  # Hakata
+    await page.goto(URL, wait_until="networkidle")
+    await page.evaluate("localStorage.clear(); localStorage.setItem('bt_city_manual','1');"
+                        "localStorage.setItem('bt_city','fukuoka');"
+                        "localStorage.setItem('bt_howto_done','1'); state.geo = null")
+    await page.wait_for_timeout(1500)
+    await page.reload(wait_until="networkidle")
+    await page.wait_for_timeout(2000)
+    await page.click("#vs-locate")
+    await page.wait_for_timeout(2500)
+    await shot("50-fukuoka-home")
+    await page.fill("#vs-to-input", "ohori")
+    await page.wait_for_timeout(1000)
+    if await page.locator("#vs-sugg .sg").count():
+        texts = await page.locator("#vs-sugg .sg").all_inner_texts()
+        idx = next((i for i, t in enumerate(texts) if "大濠" in t), 0)
+        await page.locator("#vs-sugg .sg").nth(idx).dispatch_event("mousedown")
+        await page.wait_for_timeout(5000)
+    await shot("51-fukuoka-verdict")
+    return errors, bad
+
+
 async def main():
     async with async_playwright() as p:
         report = {}
@@ -248,7 +277,8 @@ async def main():
             e2, b2 = await flow_jakarta(page, ctx, engine, shot)
             e3, b3 = await flow_tokyo(page, ctx, engine, shot)
             e4, b4 = await flow_nagoya(page, ctx, engine, shot)
-            report[engine] = (e1 + e2 + e3 + e4, b1 + b2 + b3 + b4)
+            e5, b5 = await flow_fukuoka(page, ctx, engine, shot)
+            report[engine] = (e1 + e2 + e3 + e4 + e5, b1 + b2 + b3 + b4 + b5)
             await browser.close()
 
         ok = True

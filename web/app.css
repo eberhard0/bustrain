@@ -246,3 +246,4 @@ body.no-train .vs-pick.train, body.no-train .vs-col.train { display: none; }
 body.no-train .vs-pickers { flex-direction: column; }
 header h1 small { cursor: pointer; }
 #city-menu .sg .enl { font-size: 12px; }
+body.no-bus .vs-pick.bus, body.no-bus .vs-col.bus { display: none; }

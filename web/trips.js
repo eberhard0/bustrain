@@ -382,7 +382,7 @@ async function renderVerdict() {
   // bus: pattern routing from the picked stop's area (other poles of the
   // same station square count too — the right bus may leave across the street)
   let bus = null;
-  if (busPick) {
+  if (state.cityMeta.bus !== false && busPick) {
     const area = state.index.stops
       .filter((s) => s.kind === "bus" &&
         haversine(busPick.lat, busPick.lon, s.lat, s.lon) <= 200)
@@ -442,8 +442,9 @@ async function renderVerdict() {
        · ${x.fare ? "~" + fmtFare(x.fare) : "fare n/a"}`
     : `${side === "bus" ? "🚌" : "🚆"} no option today`;
   const note = savingsNote(bus, train, esc(p.n), true);
-  const trainLine = state.cityMeta.train ? `<br>${line("train", train)}` : "";
-  box.innerHTML = `To <b>${esc(pName)}</b>:<br>${widerNote}${note}${note ? "<br>" : ""}${line("bus", bus)}${trainLine}
+  const trainLine = state.cityMeta.train ? `${state.cityMeta.bus !== false ? "<br>" : ""}${line("train", train)}` : "";
+  const busLine = state.cityMeta.bus !== false ? line("bus", bus) : "";
+  box.innerHTML = `To <b>${esc(pName)}</b>:<br>${widerNote}${note}${note ? "<br>" : ""}${busLine}${trainLine}
     <div class="take">
       ${bus ? '<button class="tb" data-take="bus">🚌 I’m taking the bus</button>' : ""}
       ${train ? '<button class="tt" data-take="train">🚆 I’m taking the train</button>' : ""}
@@ -592,8 +593,9 @@ async function renderJourney() {
   };
   out.innerHTML =
     (bus && train ? `<div class="jwin-note">${savingsNote(bus, train, esc(placeName), true)}</div>` : "") +
-    card("bus", bus) + (state.cityMeta.train ? card("train", train) : "");
-  drawJourneyMap("bus", bus, oLat, oLon, place);
+    (state.cityMeta.bus !== false ? card("bus", bus) : "") +
+    (state.cityMeta.train ? card("train", train) : "");
+  if (state.cityMeta.bus !== false) drawJourneyMap("bus", bus, oLat, oLon, place);
   if (state.cityMeta.train) drawJourneyMap("train", train, oLat, oLon, place);
 }
 
