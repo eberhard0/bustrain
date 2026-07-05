@@ -24,7 +24,7 @@ async def flow(page, ctx, tag, shot):
 
     # 01 fresh home (empty state): wipe storage first
     await page.goto(URL, wait_until="networkidle")
-    await page.evaluate("localStorage.clear(); localStorage.setItem('bt_city','beppu_oita')")
+    await page.evaluate("localStorage.clear(); localStorage.setItem('bt_city_manual','1'); localStorage.setItem('bt_city','beppu_oita')")
     await page.reload(wait_until="networkidle")
     await page.wait_for_timeout(1800)
     await shot("01-home-default")
@@ -117,7 +117,7 @@ async def flow_jakarta(page, ctx, tag, shot):
 
     await ctx.set_geolocation({"latitude": -6.1754, "longitude": 106.8272})  # Monas
     await page.goto(URL, wait_until="networkidle")
-    await page.evaluate("localStorage.clear(); localStorage.setItem('bt_city','jakarta');"
+    await page.evaluate("localStorage.clear(); localStorage.setItem('bt_city_manual','1'); localStorage.setItem('bt_city','jakarta');"
                         "localStorage.setItem('bt_howto_done','1'); state.geo = null")
     await page.wait_for_timeout(1500)  # let any cached geo fix age out
     await page.reload(wait_until="networkidle")
@@ -172,7 +172,7 @@ async def flow_tokyo(page, ctx, tag, shot):
             if r.status >= 400 and "127.0.0.1" in r.url else None)
     await ctx.set_geolocation({"latitude": 35.6896, "longitude": 139.7006})  # Shinjuku
     await page.goto(URL, wait_until="networkidle")
-    await page.evaluate("localStorage.clear(); localStorage.setItem('bt_city','tokyo');"
+    await page.evaluate("localStorage.clear(); localStorage.setItem('bt_city_manual','1'); localStorage.setItem('bt_city','tokyo');"
                         "localStorage.setItem('bt_howto_done','1'); state.geo = null")
     await page.wait_for_timeout(1500)
     await page.reload(wait_until="networkidle")
@@ -208,7 +208,7 @@ async def flow_nagoya(page, ctx, tag, shot):
             if r.status >= 400 and "127.0.0.1" in r.url else None)
     await ctx.set_geolocation({"latitude": 35.1709, "longitude": 136.8815})  # Nagoya Sta.
     await page.goto(URL, wait_until="networkidle")
-    await page.evaluate("localStorage.clear(); localStorage.setItem('bt_city','nagoya');"
+    await page.evaluate("localStorage.clear(); localStorage.setItem('bt_city_manual','1'); localStorage.setItem('bt_city','nagoya');"
                         "localStorage.setItem('bt_howto_done','1'); state.geo = null")
     await page.wait_for_timeout(1500)
     await page.reload(wait_until="networkidle")

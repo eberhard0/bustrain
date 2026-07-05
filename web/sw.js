@@ -1,8 +1,8 @@
 /* BusTrain service worker — network-first everywhere so updates land
    immediately; cache is the offline fallback only. */
-const SHELL = "bt-shell-v58";
-const SHELL_FILES = ["./", "index.html", "app.css?v=58", "app.js?v=58", "trips.js?v=58",
-  "guide.js?v=58", "vendor/leaflet/leaflet.js", "vendor/leaflet/leaflet.css",
+const SHELL = "bt-shell-v59";
+const SHELL_FILES = ["./", "index.html", "app.css?v=59", "app.js?v=59", "trips.js?v=59",
+  "guide.js?v=59", "vendor/leaflet/leaflet.js", "vendor/leaflet/leaflet.css",
   "manifest.webmanifest", "icon.svg", "icon-192.png"];
 
 self.addEventListener("install", (e) => {

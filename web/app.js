@@ -182,9 +182,34 @@ function getLocation() {
   return new Promise((res, rej) => {
     if (!navigator.geolocation) return rej(new Error("no geolocation"));
     navigator.geolocation.getCurrentPosition(
-      (p) => { state.geo = { lat: p.coords.latitude, lon: p.coords.longitude }; res(state.geo); },
+      (p) => {
+        state.geo = { lat: p.coords.latitude, lon: p.coords.longitude };
+        maybeAutoCity(state.geo.lat, state.geo.lon);
+        res(state.geo);
+      },
       (e) => rej(e), { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 });
   });
+}
+
+/* GPS says the user is in a different covered city: switch (or offer to).
+   Timezone auto-detect can't tell Japanese cities apart — GPS can. */
+function maybeAutoCity(lat, lon) {
+  if (state._cityChecked || !state.cities) return;
+  state._cityChecked = true;
+  const dist = (c) => haversine(lat, lon, c.lat, c.lon);
+  const nearest = [...state.cities].sort((a, b) => dist(a) - dist(b))[0];
+  if (nearest.id === state.city || dist(state.cityMeta) < 60000 || dist(nearest) > 80000) return;
+  if (!localStorage.getItem("bt_city_manual")) {
+    toast(`📍 You're in ${nearest.name} — switching…`);
+    setTimeout(() => switchCity(nearest.id), 900);
+  } else {
+    const t = $("#toast");
+    t.innerHTML = `📍 You seem to be in ${nearest.name} —
+      <button class="linkbtn" id="toast-switch">Switch city</button>`;
+    t.classList.remove("hidden");
+    $("#toast-switch").addEventListener("click", () => switchCity(nearest.id));
+    setTimeout(() => t.classList.add("hidden"), 8000);
+  }
 }
 
 /* ---------- rendering helpers ---------- */
@@ -765,6 +790,7 @@ function bindEvents() {
     const row = e.target.closest("[data-city]");
     if (!row) return;
     $("#city-menu").classList.add("hidden");
+    localStorage.setItem("bt_city_manual", "1");
     if (row.dataset.city !== state.city) switchCity(row.dataset.city);
   });
   $("#howto-close").addEventListener("click", () => {
@@ -815,7 +841,7 @@ async function boot() {
   ensureGpsWatch();
   ensurePush();
   if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("sw.js?v=58").catch(() => {});
+    navigator.serviceWorker.register("sw.js?v=59").catch(() => {});
     // when a new version takes over, reload once so users always run latest
     let reloaded = false;
     navigator.serviceWorker.addEventListener("controllerchange", () => {
