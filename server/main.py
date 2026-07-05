@@ -244,9 +244,39 @@ def resolve_link(url: str):
         break
     name, lat, lon = _parse_maps_url(url)
     if lat is None:
+        # newer share links redirect to a TEXT query with no coordinates
+        # (?q=Name,+Address...) — geocode the text instead of giving up
+        got = _geocode_text_query(url)
+        if got:
+            return got
         raise HTTPException(422, "No location found in that link — open it in Google Maps "
                                  "and share the place again.")
     return {"name": name, "lat": lat, "lon": lon}
+
+
+def _geocode_text_query(url: str):
+    qs = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
+    q = (qs.get("q") or [""])[0].strip()
+    if not q or re.match(r"^-?\d+\.\d+,", q):
+        return None  # empty, or coord-style q (already handled upstream)
+    name = q.split(",")[0].strip()
+    # full "Name, Address" first; bare address as fallback (Photon sometimes
+    # doesn't know small businesses but always knows the street address)
+    for query in (q, ",".join(q.split(",")[1:]).strip() or None):
+        if not query:
+            continue
+        try:
+            u = ("https://photon.komoot.io/api?limit=1&q=" +
+                 urllib.parse.quote(query))
+            req = urllib.request.Request(u, headers={"User-Agent": "bustrain-resolver"})
+            data = json.loads(urllib.request.urlopen(req, timeout=8).read())
+            feats = data.get("features") or []
+            if feats:
+                lon, lat = feats[0]["geometry"]["coordinates"][:2]
+                return {"name": name, "lat": float(lat), "lon": float(lon)}
+        except Exception:
+            continue
+    return None
 
 
 ### Web Push — lets get-off/departure reminders reach an installed PWA
