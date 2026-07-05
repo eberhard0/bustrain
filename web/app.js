@@ -34,9 +34,9 @@ const state = {
   vsPicking: null,
 };
 
-/* ---------- time (always JST) ---------- */
-function jstNow() {
-  const p = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Tokyo", year: "numeric",
+/* ---------- time (city-local) ---------- */
+function jstNow() { // name kept for history; returns CITY-local time
+  const p = new Intl.DateTimeFormat("en-GB", { timeZone: CITY_TZ, year: "numeric",
     month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit",
     hour12: false }).formatToParts(new Date());
   const g = (t) => parseInt(p.find((x) => x.type === t).value, 10);
@@ -50,12 +50,35 @@ function prevDateKey(n) {
 }
 const fmtMin = (m) => `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 
-/* ---------- data ---------- */
+/* ---------- data (multi-city) ---------- */
+let CITY_TZ = "Asia/Tokyo", CUR = "\u00a5";
+const cityPath = (f) => `data/${state.city}/${f}`;
+const fmtFare = (x) => `${CUR}${Number(x).toLocaleString("en-US")}`;
 async function loadIndex() {
-  const [r, rn] = await Promise.all([fetch("data/index.json"), fetch("data/names_en.json")]);
+  state.cities = (await (await fetch("data/cities.json")).json()).cities;
+  const saved = localStorage.getItem("bt_city");
+  let id = saved && state.cities.some((c) => c.id === saved) ? saved : null;
+  if (!id) { // first visit: match the phone's timezone, else default city
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    id = (state.cities.find((c) => c.tz === tz) || state.cities[0]).id;
+  }
+  state.city = id;
+  state.cityMeta = state.cities.find((c) => c.id === id);
+  CITY_TZ = state.cityMeta.tz;
+  CUR = state.cityMeta.cur;
+  if (state.vs && state.vs.city !== id) state.vs = { city: id }; // picks are per-city
+  document.body.classList.toggle("no-train", !state.cityMeta.train);
+  $("#hdr-sub").innerHTML = `${state.cityMeta.name} \u25be`;
+  const [r, rn] = await Promise.all([
+    fetch(cityPath("index.json")), fetch(cityPath("names_en.json"))]);
   state.index = await r.json();
   state.names = await rn.json().catch(() => null);
   $("#data-date").textContent = `Data built ${state.index.generated}.`;
+}
+function switchCity(id) {
+  localStorage.setItem("bt_city", id);
+  localStorage.removeItem("bt_vs");
+  location.reload();
 }
 
 /* ---------- English / romaji ---------- */
@@ -89,7 +112,7 @@ function enHeadsign(h, kind) {
 }
 async function loadStop(id) {
   if (!state.stopCache[id]) {
-    const r = await fetch(`data/stops/${id}.json`);
+    const r = await fetch(cityPath(`stops/${id}.json`));
     state.stopCache[id] = await r.json();
   }
   return state.stopCache[id];
@@ -99,20 +122,35 @@ function dayType(feed, key) {
   const d = state.index.feeds[feed].dates;
   return d ? d[key] : undefined;
 }
+/* expand a stored day-row list into concrete departures.
+   len-5 rows are timetabled; len-7 rows are frequency windows
+   [startMin, endMin, headwaySecs, route, headsign, pattern, idx]. */
+function expandDay(dayRows, emit) {
+  for (const row of dayRows) {
+    if (row.length === 7) {
+      const [s0, e0, hw, r, h, p, i] = row;
+      const step = Math.max(1, Math.round(hw / 60));
+      for (let m = s0; m <= e0; m += step) emit(m, r, h, p, i, step);
+    } else {
+      const [m, r, h, p, i] = row;
+      emit(m, r, h, p, i, 0);
+    }
+  }
+}
 /* upcoming departures for a stop: today's remaining + yesterday's >24h times */
 function upcoming(stop, n, nowMin, todayKey, yestKey) {
   const rows = [];
   const dtY = dayType(stop.feed, yestKey);
   if (dtY !== undefined && stop.departures[dtY]) {
-    for (const [m, r, h, p, i] of stop.departures[dtY]) {
-      if (m >= 1440 && m - 1440 >= nowMin) rows.push({ m: m - 1440, r, h, p, i });
-    }
+    expandDay(stop.departures[dtY], (m, r, h, p, i, f) => {
+      if (m >= 1440 && m - 1440 >= nowMin) rows.push({ m: m - 1440, r, h, p, i, f });
+    });
   }
   const dtT = dayType(stop.feed, todayKey);
   if (dtT !== undefined && stop.departures[dtT]) {
-    for (const [m, r, h, p, i] of stop.departures[dtT]) {
-      if (m >= nowMin && m < 1440) rows.push({ m, r, h, p, i });
-    }
+    expandDay(stop.departures[dtT], (m, r, h, p, i, f) => {
+      if (m >= nowMin && m < 1440) rows.push({ m, r, h, p, i, f });
+    });
   }
   rows.sort((a, b) => a.m - b.m);
   return rows.slice(0, n);
@@ -255,10 +293,11 @@ async function renderCompare() {
   $("#vs-train-walk").textContent = train && state.vs.train.walkMin != null
     ? `${state.vs.train.dist} · ~${state.vs.train.walkMin} min walk` : "";
   const cols = $("#vs-cols");
-  if (!bus || !train) { cols.classList.add("hidden"); return; }
+  const ready = state.cityMeta.train ? (bus && train) : !!bus;
+  if (!ready) { cols.classList.add("hidden"); $("#vs-hint").classList.add("hidden"); return; }
   cols.classList.remove("hidden");
   $("#vs-bus-head").textContent = bus.name.length > 9 ? bus.name.slice(0, 9) + "…" : bus.name;
-  $("#vs-train-head").textContent = train.name;
+  if (train) $("#vs-train-head").textContent = train.name;
 
   const n = jstNow(), nowMin = n.h * 60 + n.mi, tk = dateKey(n), yk = prevDateKey(n);
   $("#vs-hint").classList.remove("hidden");
@@ -276,7 +315,7 @@ async function renderCompare() {
   $("#vs-hint").textContent = p
     ? `🧭 Showing only departures toward ${p.n}${p.e ? " " + p.e : ""} — tap one to set its reminder and walk there`
     : "🧭 Tap a departure to set its reminder and get walking directions to the stop";
-  for (const side of ["bus", "train"]) {
+  for (const side of (state.cityMeta.train ? ["bus", "train"] : ["bus"])) {
     const cfg = state.vs[side];
     const meta = stopMeta(cfg.id);
     const stop = await loadStop(cfg.id);
@@ -321,7 +360,8 @@ async function vsAutoPick() {
   $("#vs-status").textContent = "📍 Locating…";
   try {
     await getLocation();
-    for (const kind of ["bus", "train"]) {
+    const kinds = state.cityMeta.train ? ["bus", "train"] : ["bus"];
+    for (const kind of kinds) {
       const ranked = state.index.stops.filter((s) => s.kind === kind)
         .map((s) => ({ ...s, _d: haversine(state.geo.lat, state.geo.lon, s.lat, s.lon) }))
         .sort((a, b) => a._d - b._d);
@@ -564,10 +604,24 @@ async function renderDetail() {
   $("#detail-days").innerHTML = tabs.map((t) =>
     `<button class="${t.dt === active ? "active" : ""}" data-day="${t.dt}">
       ${t.label}${t.isToday ? " · today" : ""}</button>`).join("");
-  const rows = (stop.departures[active] || []).map(([m, r, h]) => ({ m: m % 1440, r, h }));
+  const raw = stop.departures[active] || [];
+  const rows = [];
+  for (const row of raw) {
+    if (row.length === 7) {
+      const [s0, e0, hw, r, h] = row;
+      rows.push({ freq: true, s: s0 % 1440, e: e0 % 1440, step: Math.max(1, Math.round(hw / 60)), r, h });
+    } else {
+      const [m, r, h] = row;
+      rows.push({ m: m % 1440, r, h });
+    }
+  }
   const isToday = active === String(todayDt);
-  $("#detail-list").innerHTML = rows.map((d) =>
-    depRow(stop, d, nowMin, { past: isToday && d.m < nowMin })).join("") ||
+  $("#detail-list").innerHTML = rows.map((d) => d.freq
+    ? `<div class="dep"><span class="${pillClass(d.r, stop.kind)}">${esc(pillText(d.r, stop.kind))}</span>
+        <div class="info"><div class="dest">${esc(d.h)}</div>
+          ${enHeadsign(d.h, stop.kind) ? `<div class="ename">${esc(enHeadsign(d.h, stop.kind))}</div>` : ""}
+          <div class="time">${fmtMin(d.s)}–${fmtMin(d.e)} · every ~${d.step} min</div></div></div>`
+    : depRow(stop, d, nowMin, { past: isToday && d.m < nowMin })).join("") ||
     `<div class="empty"><p>No departures for this day type.</p></div>`;
   const firstUp = rows.findIndex((d) => !(isToday && d.m < nowMin));
   if (firstUp > 2) $("#detail-list").children[firstUp]?.scrollIntoView({ block: "center" });
@@ -663,6 +717,21 @@ function bindEvents() {
     await ensurePush(); // register for background delivery too
     updateNotifBanner();
   });
+  $("#hdr-sub").addEventListener("click", () => {
+    const menu = $("#city-menu");
+    if (!menu.classList.contains("hidden")) { menu.classList.add("hidden"); return; }
+    menu.innerHTML = state.cities.map((c) => `<div class="sg" data-city="${c.id}">
+      <span class="ic">${c.id === state.city ? "✅" : "🌏"}</span>
+      <div class="tx"><div class="jp">${c.name}</div>
+        <div class="enl">${c.country}${c.train ? " · bus + train" : " · bus"}</div></div></div>`).join("");
+    menu.classList.remove("hidden");
+  });
+  $("#city-menu").addEventListener("click", (e) => {
+    const row = e.target.closest("[data-city]");
+    if (!row) return;
+    $("#city-menu").classList.add("hidden");
+    if (row.dataset.city !== state.city) switchCity(row.dataset.city);
+  });
   $("#howto-close").addEventListener("click", () => {
     localStorage.setItem("bt_howto_done", "1");
     $("#ios-howto").classList.add("hidden");
@@ -711,7 +780,7 @@ async function boot() {
   ensureGpsWatch();
   ensurePush();
   if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("sw.js?v=38").catch(() => {});
+    navigator.serviceWorker.register("sw.js?v=40").catch(() => {});
     // when a new version takes over, reload once so users always run latest
     let reloaded = false;
     navigator.serviceWorker.addEventListener("controllerchange", () => {

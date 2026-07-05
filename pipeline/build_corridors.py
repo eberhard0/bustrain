@@ -25,7 +25,7 @@ ROOT = Path(__file__).resolve().parent.parent
 RAW = ROOT / "data" / "raw"
 JR_CACHE = RAW / "jr"
 TRAIN_CACHE = RAW / "jr_trains"
-OUT = ROOT / "web" / "data" / "corridors.json"
+OUT = ROOT / "web" / "data" / "beppu_oita" / "corridors.json"
 
 FEEDS = ["oitabus", "oitakotsu", "kamenoibus"]
 STATION_NAMES = [v[0] for v in STATIONS.values()]

@@ -14,7 +14,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 RAW = ROOT / "data" / "raw"
-OUT = ROOT / "web" / "data" / "names_en.json"
+OUT = ROOT / "web" / "data" / "beppu_oita" / "names_en.json"
 FEEDS = ["oitabus", "oitakotsu", "kamenoibus"]
 
 # --- kana -> Hepburn ---
@@ -120,7 +120,7 @@ def main():
 
     # verify JR headsign coverage
     missing = set()
-    for f in (ROOT / "web" / "data" / "stops").glob("jr_*.json"):
+    for f in (ROOT / "web" / "data" / "beppu_oita" / "stops").glob("jr_*.json"):
         data = json.loads(f.read_text(encoding="utf-8"))
         for rows in data["departures"].values():
             for _, _, h in rows:

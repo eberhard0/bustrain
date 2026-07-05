@@ -1,7 +1,7 @@
 # 🚌🚆 BusTrain — never miss your bus or train
 
-**A tourist-friendly bus & train departure app for Beppu and Ōita, Japan — built to be
-adapted to any city with open transit data.**
+**A tourist-friendly bus & train departure app — Beppu/Ōita (Japan) and Jakarta
+(Indonesia) editions, built to be adapted to any city with open transit data.**
 
 Live demo: **https://bustrain.iameberhard.com** (install it from Safari/Chrome with
 "Add to Home Screen" — it's a PWA) · **User guide:**
@@ -95,13 +95,24 @@ GTFS input: download the three Ōita feeds from the [Ōita open-data catalog
 `亀の井バスGTFSデータ` — and unzip them into `data/raw/oitabus/`, `data/raw/oitakotsu/`,
 `data/raw/kamenoibus/`.
 
+## Cities
+
+| City | Data | Modes |
+|---|---|---|
+| Beppu & Ōita, Japan | Ōita Pref. GTFS-JP ×3 + JR Kyushu timetables | bus + train, ¥ |
+| Jakarta, Indonesia | TransJakarta GTFS (frequency-based) | bus, Rp |
+
+The app auto-selects the city from your phone's timezone on first visit; tap the
+city name in the header to switch. Each city lives in `web/data/<city>/` and is
+declared in `web/data/cities.json` (timezone, currency, has-rail flag).
+
 ## Adapting BusTrain to your city / country
 
 This codebase was written to generalize. What's regional and what's not:
 
 | Component | Regional? | What to do for a new region |
 |---|---|---|
-| `build_gtfs.py` | **No** — standard GTFS | Point it at any GTFS feed(s): [Mobility Database](https://mobilitydatabase.org/) lists thousands worldwide. Update the `FEEDS` dict (names/colors) and the pattern-id prefixes. Fares work if the feed has `fare_rules.txt`. |
+| `gtfs_core.py` (used by `build_gtfs.py` / `build_jakarta.py`) | **No** — standard GTFS, incl. `frequencies.txt` headway feeds | Point it at any GTFS feed(s): [Mobility Database](https://mobilitydatabase.org/) lists thousands worldwide. Update the `FEEDS` dict (names/colors) and the pattern-id prefixes. Fares work if the feed has `fare_rules.txt`. |
 | `patterns.json` routing | **No** | Works unchanged for any GTFS region. |
 | `fetch_jr.py` | **Yes** — scrapes JR Kyushu | If your rail operator publishes GTFS, delete this and treat rail as another GTFS feed (set `kind: "train"`). Otherwise write an equivalent scraper/importer for your operator's published timetables. |
 | `build_corridors.py` | Partially | Only needed for the bus-vs-train comparison between named station areas. With all-GTFS input you can compute rail times from GTFS instead of itinerary scraping. The fare ladder is JR-specific — replace with your operator's. |

@@ -16,7 +16,7 @@ KANA_ONLY = re.compile(r"^[ぁ-んァ-ヶー・\s0-9A-Za-z！!?？&＆'’\-]+$"
 HAS_KANA = re.compile(r"[ぁ-んァ-ヶ]")
 
 ROOT = Path(__file__).resolve().parent.parent
-OUT = ROOT / "web" / "data" / "pois.json"
+OUT = ROOT / "web" / "data" / "beppu_oita" / "pois.json"
 CACHE = ROOT / "data" / "raw" / "osm_pois.json"
 
 QUERY = """

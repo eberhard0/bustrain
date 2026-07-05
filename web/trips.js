@@ -37,9 +37,9 @@ async function loadCorridors() {
     } catch { return fb; }
   };
   const [cor, poi, pat] = await Promise.all([
-    get("data/corridors.json", null),
-    get("data/pois.json", null),
-    get("data/patterns.json", null)]);
+    get(cityPath("corridors.json"), null),
+    get(cityPath("pois.json"), null),
+    get(cityPath("patterns.json"), null)]);
   if (cor) state.corridors = cor;
   else state.corridors = state.corridors || { pairs: {}, stations: {} };
   if (poi) state.pois = poi.pois || [];
@@ -166,7 +166,7 @@ function savingsNote(bus, train, placeLabel, useTotals) {
   const dt = tB - tT;                                     // >0 → train faster
   const dy = bus.fare && train.fare ? train.fare - bus.fare : null; // >0 → bus cheaper
   const min = (x) => `${Math.abs(x)} min`;
-  const yen = (x) => `~¥${Math.abs(x)}`;
+  const yen = (x) => `~${fmtFare(Math.abs(x))}`;
   const fareNote = dy === null ? `<br><small>(${!bus.fare ? "bus" : "train"} fare unknown — compare time only)</small>` : "";
   if (Math.abs(dt) <= 1) {
     return `🚌🚆 Both reach ${placeLabel} at about the same time` +
@@ -406,10 +406,11 @@ async function renderVerdict() {
     ? `${side === "bus" ? "🚌" : "🚆"} <b>${fmtMin(x.dep)} → ~${fmtMin(x.total ?? x.arr)}</b> at ${esc(p.n)}
        ${x.walk ? `· 🚶 ${x.walk} min to ${esc(x.boardAt || "the stop")} ${esc(en(x.boardAt) || "")}` : ""}
        · get off ${esc(x.alightName || "")} ${esc(en(x.alightName) || "")}${x.finalWalk ? ` + 🚶 ${x.finalWalk} min` : ""}
-       · ${x.fare ? "~¥" + x.fare : "fare n/a"}`
+       · ${x.fare ? "~" + fmtFare(x.fare) : "fare n/a"}`
     : `${side === "bus" ? "🚌" : "🚆"} no option today`;
   const note = savingsNote(bus, train, esc(p.n), true);
-  box.innerHTML = `To <b>${esc(pName)}</b>:<br>${widerNote}${note}${note ? "<br>" : ""}${line("bus", bus)}<br>${line("train", train)}
+  const trainLine = state.cityMeta.train ? `<br>${line("train", train)}` : "";
+  box.innerHTML = `To <b>${esc(pName)}</b>:<br>${widerNote}${note}${note ? "<br>" : ""}${line("bus", bus)}${trainLine}
     <div class="take">
       ${bus ? '<button class="tb" data-take="bus">🚌 I’m taking the bus</button>' : ""}
       ${train ? '<button class="tt" data-take="train">🚆 I’m taking the train</button>' : ""}
@@ -453,27 +454,32 @@ async function renderJourney() {
     try { status.textContent = "📍 Finding you…"; status.classList.remove("hidden"); await getLocation(); }
     catch { status.textContent = "📍 Location unavailable — choose your starting station in “From”."; out.innerHTML = ""; return; }
   }
-  const o = resolveOrigin();
-  if (!o) { out.innerHTML = ""; return; }
+  const o = resolveOrigin(); // origin station — null in bus-only cities
+  if (!o && state.cityMeta.train) { out.innerHTML = ""; return; }
+  if (!o && !state.geo) {
+    status.textContent = "📍 Location unavailable — allow location access.";
+    status.classList.remove("hidden");
+    return;
+  }
   status.classList.add("hidden");
   const place = state.destPlace;
   const input = $("#j-to-input");
   if (place && !input.value) input.value = `${place.n}${place.e ? " · " + place.e : ""}`;
   if (!place) {
-    out.innerHTML = `<div class="empty"><p>Starting near <b>${o} ${en(o)}</b>.</p>
+    out.innerHTML = `<div class="empty"><p>Starting near <b>${o ? `${o} ${en(o)}` : "your location"}</b>.</p>
       <p>Type where you want to go — a sight, onsen, the airport, a hospital,
       a station… and we'll pick the right stop for you.</p></div>`;
     return;
   }
   const n = jstNow(), nowMin = n.h * 60 + n.mi, tk = dateKey(n), yk = prevDateKey(n);
-  const oSt = state.corridors.stations[o];
-  const oLat = from.value === "loc" && state.geo ? state.geo.lat : oSt.lat;
-  const oLon = from.value === "loc" && state.geo ? state.geo.lon : oSt.lon;
+  const oSt = o ? state.corridors.stations[o] : null;
+  const oLat = (from.value === "loc" || !oSt) && state.geo ? state.geo.lat : oSt.lat;
+  const oLon = (from.value === "loc" || !oSt) && state.geo ? state.geo.lon : oSt.lon;
   out.innerHTML = `<div class="empty"><p>Finding the best bus and train…</p></div>`;
 
   // --- train: nearest covered station to the place, corridor times ---
   let train = null;
-  const s2 = nearestStationTo(place.lat, place.lon, o);
+  const s2 = state.cityMeta.train && o ? nearestStationTo(place.lat, place.lon, o) : null;
   if (s2 && s2._d <= 4000) {
     const co = await computeOptions(o, s2.name);
     if (co && co.train) {
@@ -511,7 +517,7 @@ async function renderJourney() {
           — the <b>${ordinal((x.stops ?? 0) + 1)} stop</b>, ~${fmtMin(x.arr)}</span><br>
         then 🚶 ${x.finalWalk} min walk (${fmtDist(x.finalDist)}) →
         <b>arrive ${esc(placeName)} ~${fmtMin(x.total)}</b><br>
-        ride ${x.dur} min${x.fare ? " · ~¥" + x.fare : ""}
+        ride ${x.dur} min${x.fare ? " · ~" + fmtFare(x.fare) : ""}
         ${x.walk ? `<br><span class="leave">${leave < 0 ? "⚠ tight — " + x.walk + " min walk to the stop" :
           leave === 0 ? "🚶 leave NOW (" + x.walk + " min walk)" :
           "🚶 leave in " + leave + " min (" + x.walk + " min walk)"}</span>` : ""}
@@ -528,9 +534,9 @@ async function renderJourney() {
   };
   out.innerHTML =
     (bus && train ? `<div class="jwin-note">${savingsNote(bus, train, esc(placeName), true)}</div>` : "") +
-    card("bus", bus) + card("train", train);
+    card("bus", bus) + (state.cityMeta.train ? card("train", train) : "");
   drawJourneyMap("bus", bus, oLat, oLon, place);
-  drawJourneyMap("train", train, oLat, oLon, place);
+  if (state.cityMeta.train) drawJourneyMap("train", train, oLat, oLon, place);
 }
 
 /* --- journey map: you → boarding stop → get-off stop → destination --- */
@@ -615,12 +621,12 @@ function renderHistory() {
     const t = h.data, dtme = new Date(h.ts * 1000).toLocaleString("ja-JP",
       { timeZone: "Asia/Tokyo", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
     const alt = t.altArr != null
-      ? ` · alt ${t.altMode === "bus" ? "🚌" : "🚆"} would arrive ${fmtMin(t.altArr)}${t.altFare ? " ~¥" + t.altFare : ""}`
+      ? ` · alt ${t.altMode === "bus" ? "🚌" : "🚆"} would arrive ${fmtMin(t.altArr)}${t.altFare ? " ~" + fmtFare(t.altFare) : ""}`
       : "";
     return `<div class="hist-row">
       <div class="l1"><span>${t.mode === "bus" ? "🚌" : "🚆"} ${esc(t.from)} ${esc(en(t.from))}
         → ${esc(t.to)} ${esc(en(t.to))}</span>
-        <span>${t.fare ? "~¥" + t.fare : ""}</span></div>
+        <span>${t.fare ? "~" + fmtFare(t.fare) : ""}</span></div>
       <div class="l2">${dtme} · dep ${fmtMin(t.dep)} → arr ~${fmtMin(t.arr)}${alt}</div>
       <div class="actions">
         <button class="linkbtn" data-repeat="${h.id}">↻ Repeat this trip</button>
@@ -639,7 +645,7 @@ function renderHistory() {
   }
   stats.classList.toggle("hidden", nBoth === 0);
   if (nBoth) {
-    const money = yen >= 0 ? `saved <b>~¥${yen}</b>` : `spent <b>~¥${-yen}</b> extra`;
+    const money = yen >= 0 ? `saved <b>~${fmtFare(yen)}</b>` : `spent <b>~${fmtFare(-yen)}</b> extra`;
     const time = mins >= 0 ? `arrived <b>${mins} min</b> earlier in total` : `gave up <b>${-mins} min</b> in total`;
     stats.className = "stats";
     stats.innerHTML = `📊 <b>${trips.length} trips logged</b> (${nBoth} with a bus/train alternative).<br>
@@ -782,7 +788,11 @@ function initTrips() {
     state.user = null; state.history = [];
     renderAccount(); renderHistory(); toast("Logged out — nothing more will be saved.");
   });
-  loadCorridors().then(() => { if (state.tab === "compare") renderVerdict(); });
+  const waitCity = setInterval(() => { // app.js resolves the city first
+    if (!state.city) return;
+    clearInterval(waitCity);
+    loadCorridors().then(() => { if (state.tab === "compare") renderCompare(); });
+  }, 100);
   fetchMe().then(() => { renderAccount(); if (state.tab === "reminders") renderHistory(); });
 }
 initTrips();

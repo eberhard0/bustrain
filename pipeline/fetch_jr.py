@@ -17,7 +17,7 @@ from datetime import date, timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-OUT = ROOT / "web" / "data"
+OUT = ROOT / "web" / "data" / "beppu_oita"
 CACHE = ROOT / "data" / "raw" / "jr"
 
 # station code -> (name, lat, lon, lines)  [coords from OpenStreetMap]
