@@ -139,7 +139,7 @@ function expandDay(dayRows, emit) {
   }
 }
 /* upcoming departures for a stop: today's remaining + yesterday's >24h times */
-function upcoming(stop, n, nowMin, todayKey, yestKey) {
+function upcoming(stop, n, nowMin, todayKey, yestKey, grace = 0) {
   const rows = [];
   const dtY = dayType(stop.feed, yestKey);
   if (dtY !== undefined && stop.departures[dtY]) {
@@ -150,7 +150,7 @@ function upcoming(stop, n, nowMin, todayKey, yestKey) {
   const dtT = dayType(stop.feed, todayKey);
   if (dtT !== undefined && stop.departures[dtT]) {
     expandDay(stop.departures[dtT], (m, r, h, p, i, f) => {
-      if (m >= nowMin && m < 1440) rows.push({ m, r, h, p, i, f });
+      if (m >= nowMin - grace && m < 1440) rows.push({ m, r, h, p, i, f, late: m < nowMin });
     });
   }
   rows.sort((a, b) => a.m - b.m);
@@ -315,14 +315,18 @@ async function renderCompare() {
       trainDest = s2 && s2._d <= 4000 ? s2.name : null;
     }
   }
-  $("#vs-hint").textContent = p
+  const live = state.cityMeta.liveUrl
+    ? ` <a href="${state.cityMeta.liveUrl}" target="_blank" rel="noopener">📡 live bus map</a>`
+    : "";
+  $("#vs-hint").innerHTML = (p
     ? `🧭 Showing only departures toward ${p.n}${p.e ? " " + p.e : ""} — tap one to set its reminder and walk there`
-    : "🧭 Tap a departure to set its reminder and get walking directions to the stop";
+    : "🧭 Tap a departure to set its reminder and get walking directions to the stop")
+    + " · scheduled times, no live delays" + live;
   for (const side of (state.cityMeta.train ? ["bus", "train"] : ["bus"])) {
     const cfg = state.vs[side];
     const meta = stopMeta(cfg.id);
     const stop = await loadStop(cfg.id);
-    let rows = upcoming(stop, 40, nowMin, tk, yk);
+    let rows = upcoming(stop, 40, nowMin, tk, yk, 5); // recent rows stay: buses run late
     if (side === "bus" && busDestNames) {
       rows = rows.filter((d) => {
         const pat = d.p && state.patterns[d.p];
@@ -352,15 +356,18 @@ async function renderCompare() {
       const inMin = d.m - nowMin;
       const leaveIn = inMin - w;
       const missed = leaveIn < 0;
-      const leaveTxt = w
+      const leaveTxt = d.late
+        ? `⏳ scheduled ${-inMin} min ago — no live tracking here; it may simply be running late`
+        : w
         ? (missed ? "⚠ can't make it on foot" : leaveIn === 0 ? "🚶 leave NOW" : `🚶 leave in ${leaveIn} min (${fmtMin(d.m - w)})`)
         : "";
+      const inTxt = d.late ? "late?" : inMin === 0 ? "due now" : `${inMin} min`;
       const kind = side === "train" ? "train" : "bus";
       const enH = enHeadsign(d.h, kind);
       const autorem = JSON.stringify({ stopId: cfg.id, m: d.m, r: d.r, h: d.h }).replace(/'/g, "&#39;");
-      return `<div class="vdep ${missed ? "missed" : countClass(inMin)}" ${guideAttrs}
+      return `<div class="vdep ${d.late || missed ? "missed" : countClass(inMin)}" ${guideAttrs}
           data-autorem='${autorem}'>
-        <div class="l1"><b>${fmtMin(d.m)}</b><span class="in">${inMin} min 🧭</span></div>
+        <div class="l1"><b>${fmtMin(d.m)}</b><span class="in">${inTxt} 🧭</span></div>
         <div class="l2">${esc(kind === "train" ? enRoute(d.r) : d.r)} · ${esc(d.h)}</div>
         ${enH ? `<div class="l2 ename">${esc(enH)}</div>` : ""}
         ${leaveTxt ? `<div class="leave">${leaveTxt}</div>` : ""}
@@ -801,7 +808,7 @@ async function boot() {
   ensureGpsWatch();
   ensurePush();
   if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("sw.js?v=51").catch(() => {});
+    navigator.serviceWorker.register("sw.js?v=52").catch(() => {});
     // when a new version takes over, reload once so users always run latest
     let reloaded = false;
     navigator.serviceWorker.addEventListener("controllerchange", () => {
