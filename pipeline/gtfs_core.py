@@ -191,13 +191,14 @@ def build_feed(feed_id, raw_dir, prefix, horizon_days=400):
     return stop_deps, stop_pos, dt_sets, dates_map, dt_labels, patterns
 
 
-def build_city(feeds, raw_root, out_dir, kind="bus"):
-    """feeds: {feed_id: {name, name_en, color, prefix}}. Writes stops/, patterns.json
-    and returns (stop_index, feed_meta, patterns)."""
+def build_city(feeds, raw_root, out_dir):
+    """feeds: {feed_id: {name, name_en, color, prefix, kind?}}. Writes stops/,
+    patterns.json and returns (stop_index, feed_meta, patterns)."""
     out = Path(out_dir)
     (out / "stops").mkdir(parents=True, exist_ok=True)
     all_stops, feed_meta, all_patterns = [], {}, {}
     for feed_id, cfg in feeds.items():
+        kind = cfg.get("kind", "bus")
         deps, pos, dt_sets, dates_map, dt_labels, patterns = build_feed(
             feed_id, Path(raw_root) / feed_id, cfg["prefix"])
         all_patterns.update(patterns)
@@ -223,7 +224,7 @@ def build_city(feeds, raw_root, out_dir, kind="bus"):
                               "lon": round(sum(lons) / len(lons), 6),
                               "n": len(entries)})
             count += 1
-        feed_meta[feed_id] = {k: v for k, v in cfg.items() if k != "prefix"}
+        feed_meta[feed_id] = {k: v for k, v in cfg.items() if k not in ("prefix", "kind")}
         feed_meta[feed_id].update({"dates": dates_map, "dt_labels": dt_labels})
         print(f"{feed_id}: {count} named stops, {len(patterns)} patterns")
     with open(out / "patterns.json", "w", encoding="utf-8") as f:

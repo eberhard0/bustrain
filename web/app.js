@@ -309,9 +309,11 @@ async function renderCompare() {
     busDestNames = new Set(state.index.stops
       .filter((s) => s.kind === "bus" && haversine(p.lat, p.lon, s.lat, s.lon) <= 600)
       .map((s) => s.name));
-    trainO = originStation();
-    const s2 = trainO ? nearestStationTo(p.lat, p.lon, trainO) : null;
-    trainDest = s2 && s2._d <= 4000 ? s2.name : null;
+    if (!state.cityMeta.railPatterns) {
+      trainO = originStation();
+      const s2 = trainO ? nearestStationTo(p.lat, p.lon, trainO) : null;
+      trainDest = s2 && s2._d <= 4000 ? s2.name : null;
+    }
   }
   $("#vs-hint").textContent = p
     ? `🧭 Showing only departures toward ${p.n}${p.e ? " " + p.e : ""} — tap one to set its reminder and walk there`
@@ -326,6 +328,16 @@ async function renderCompare() {
         const pat = d.p && state.patterns[d.p];
         if (!pat) return false;
         for (let j = d.i + 1; j < pat.s.length; j++) if (busDestNames.has(pat.s[j])) return true;
+        return false;
+      });
+    } else if (side === "train" && state.cityMeta.railPatterns && p && state.patterns) {
+      const railDest = new Set(state.index.stops
+        .filter((s) => s.kind === "train" && haversine(p.lat, p.lon, s.lat, s.lon) <= 900)
+        .map((s) => s.name));
+      if (railDest.size) rows = rows.filter((d) => {
+        const pat = d.p && state.patterns[d.p];
+        if (!pat) return false;
+        for (let j = d.i + 1; j < pat.s.length; j++) if (railDest.has(pat.s[j])) return true;
         return false;
       });
     } else if (side === "train" && trainO && trainDest && trainDest !== trainO) {
@@ -789,7 +801,7 @@ async function boot() {
   ensureGpsWatch();
   ensurePush();
   if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("sw.js?v=45").catch(() => {});
+    navigator.serviceWorker.register("sw.js?v=50").catch(() => {});
     // when a new version takes over, reload once so users always run latest
     let reloaded = false;
     navigator.serviceWorker.addEventListener("controllerchange", () => {

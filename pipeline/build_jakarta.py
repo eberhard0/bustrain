@@ -18,6 +18,8 @@ OUT = ROOT / "web" / "data" / "jakarta"
 FEEDS = {
     "transjakarta": {"name": "Transjakarta", "name_en": "Transjakarta",
                      "color": "#00549F", "prefix": "tj"},
+    "jakartarail": {"name": "MRT / LRT", "name_en": "MRT & LRT (headway model)",
+                    "color": "#C8102E", "prefix": "jr2", "kind": "train"},
 }
 
 

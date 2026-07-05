@@ -51,7 +51,8 @@ async function loadCorridors() {
 async function ensureCorridors() {
   const ready = () => state.corridors &&
     Object.keys(state.patterns || {}).length > 0 &&
-    (!state.cityMeta.train || Object.keys(state.corridors.pairs || {}).length > 0);
+    (!state.cityMeta.train || state.cityMeta.railPatterns ||
+     Object.keys(state.corridors.pairs || {}).length > 0);
   if (ready()) return true;
   await loadCorridors(); // retry — e.g. a dropped LTE fetch on first load
   return ready();
@@ -112,9 +113,9 @@ function nearestStationTo(lat, lon, excl) {
 
 /* pattern-based bus routing: any origin point -> any destination point.
    originOverride restricts boarding to specific stops (home-tab picked stop). */
-async function busViaPatterns(oLat, oLon, place, nowMin, tk, yk, originOverride) {
+async function busViaPatterns(oLat, oLon, place, nowMin, tk, yk, originOverride, kind = "bus") {
   const near = (lat, lon, radius, count) => state.index.stops
-    .filter((s) => s.kind === "bus")
+    .filter((s) => s.kind === kind)
     .map((s) => ({ ...s, _d: haversine(lat, lon, s.lat, s.lon) }))
     .filter((s) => s._d <= radius)
     .sort((a, b) => a._d - b._d).slice(0, count);
@@ -352,7 +353,13 @@ async function renderVerdict() {
 
   // train: picked station -> nearest covered station to the place + final walk
   let train = null;
-  const o = originStation();
+  const o = state.cityMeta.railPatterns ? null : originStation();
+  if (state.cityMeta.railPatterns) {
+    if (trainPick) {
+      train = await busViaPatterns(trainPick.lat, trainPick.lon, p, nowMin, tk, yk,
+        [trainPick], "train");
+    }
+  } else {
   if (o) {
     const s2 = nearestStationTo(p.lat, p.lon, o);
     if (s2 && s2._d <= 4000) {
@@ -363,6 +370,7 @@ async function renderVerdict() {
         train.total = train.arr + train.finalWalk;
       }
     }
+  }
   }
   // bus: pattern routing from the picked stop's area (other poles of the
   // same station square count too — the right bus may leave across the street)
@@ -382,7 +390,11 @@ async function renderVerdict() {
   if (!bus && !train && state.geo) {
     // nothing from the picked stops — offer what a short walk unlocks
     bus = await busViaPatterns(state.geo.lat, state.geo.lon, p, nowMin, tk, yk);
-    const o2 = nearestStationTo(state.geo.lat, state.geo.lon, null);
+    if (state.cityMeta.railPatterns) {
+      train = await busViaPatterns(state.geo.lat, state.geo.lon, p, nowMin, tk, yk,
+        null, "train");
+    }
+    const o2 = !state.cityMeta.railPatterns && nearestStationTo(state.geo.lat, state.geo.lon, null);
     if (o2) {
       const s2 = nearestStationTo(p.lat, p.lon, o2.name);
       if (s2 && s2._d <= 4000 && s2.name !== o2.name) {
@@ -418,7 +430,8 @@ async function renderVerdict() {
       ${bus ? '<button class="tb" data-take="bus">🚌 I’m taking the bus</button>' : ""}
       ${train ? '<button class="tt" data-take="train">🚆 I’m taking the train</button>' : ""}
     </div>`;
-  state.lastOptions = { o: o || (busPick ? busPick.name : ""), d: p.n, options: { bus, train } };
+  state.lastOptions = { o: o || (trainPick && train ? trainPick.name : busPick ? busPick.name : ""),
+    d: p.n, options: { bus, train } };
 }
 
 /* --- journey planner (Search tab) --- */
@@ -457,8 +470,8 @@ async function renderJourney() {
     try { status.textContent = "📍 Finding you…"; status.classList.remove("hidden"); await getLocation(); }
     catch { status.textContent = "📍 Location unavailable — choose your starting station in “From”."; out.innerHTML = ""; return; }
   }
-  const o = resolveOrigin(); // origin station — null in bus-only cities
-  if (!o && state.cityMeta.train) { out.innerHTML = ""; return; }
+  const o = resolveOrigin(); // origin station — null outside corridor-rail cities
+  if (!o && state.cityMeta.train && !state.cityMeta.railPatterns) { out.innerHTML = ""; return; }
   if (!o && !state.geo) {
     status.textContent = "📍 Location unavailable — allow location access.";
     status.classList.remove("hidden");
@@ -476,13 +489,26 @@ async function renderJourney() {
   }
   const n = jstNow(), nowMin = n.h * 60 + n.mi, tk = dateKey(n), yk = prevDateKey(n);
   const oSt = o ? state.corridors.stations[o] : null;
+  if ((from.value === "loc" || !oSt) && !state.geo) {
+    await getLocation().catch(() => null); // journey may be the first geo use
+    if (!state.geo && !oSt) {
+      status.textContent = "📍 Location unavailable — allow location access.";
+      status.classList.remove("hidden");
+      return;
+    }
+  }
   const oLat = (from.value === "loc" || !oSt) && state.geo ? state.geo.lat : oSt.lat;
   const oLon = (from.value === "loc" || !oSt) && state.geo ? state.geo.lon : oSt.lon;
   out.innerHTML = `<div class="empty"><p>Finding the best bus and train…</p></div>`;
 
   // --- train: nearest covered station to the place, corridor times ---
   let train = null;
-  const s2 = state.cityMeta.train && o ? nearestStationTo(place.lat, place.lon, o) : null;
+  if (state.cityMeta.railPatterns && state.geo) {
+    train = await busViaPatterns(state.geo.lat, state.geo.lon, place, nowMin, tk, yk,
+      null, "train");
+  }
+  const s2 = state.cityMeta.train && !state.cityMeta.railPatterns && o
+    ? nearestStationTo(place.lat, place.lon, o) : null;
   if (s2 && s2._d <= 4000) {
     const co = await computeOptions(o, s2.name);
     if (co && co.train) {
@@ -497,7 +523,9 @@ async function renderJourney() {
   const placeName = `${place.n}${place.e ? " " + place.e : en(place.n) ? " " + en(place.n) : ""}`;
   if (!bus && !train) {
     // any direct ride at ALL today, from the first departure? -> timing vs structure
-    const anyToday = await busViaPatterns(oLat, oLon, place, 0, tk, yk);
+    const anyToday = await busViaPatterns(oLat, oLon, place, 0, tk, yk) ||
+      (state.cityMeta.railPatterns
+        ? await busViaPatterns(oLat, oLon, place, 0, tk, yk, null, "train") : null);
     const gmaps = `https://www.google.com/maps/dir/?api=1&origin=${oLat},${oLon}` +
       `&destination=${place.lat},${place.lon}&travelmode=transit`;
     out.innerHTML = `<div class="empty"><p>${anyToday

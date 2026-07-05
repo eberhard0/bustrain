@@ -100,11 +100,17 @@ GTFS input: download the three Ōita feeds from the [Ōita open-data catalog
 | City | Data | Modes |
 |---|---|---|
 | Beppu & Ōita, Japan | Ōita Pref. GTFS-JP ×3 + JR Kyushu timetables | bus + train, ¥ |
-| Jakarta, Indonesia | TransJakarta GTFS (frequency-based) | bus, Rp |
+| Jakarta, Indonesia | TransJakarta GTFS + MRT/LRT headway model | bus + rail, Rp |
 
 The app auto-selects the city from your phone's timezone on first visit; tap the
 city name in the header to switch. Each city lives in `web/data/<city>/` and is
 declared in `web/data/cities.json` (timezone, currency, has-rail flag).
+
+**Jakarta rail note:** no official GTFS exists for MRT Jakarta, LRT Jakarta, LRT
+Jabodebek or KRL. `pipeline/build_jakarta_rail.py` generates a headway-based GTFS
+for the MRT North–South line and both LRTs from the operators' published hours,
+frequencies and fare rules — which is faithful to how these turn-up-and-go systems
+actually publish service ("every 5–10 minutes"). KRL Commuterline is not covered.
 
 ## Adapting BusTrain to your city / country
 
