@@ -228,10 +228,13 @@ function searchStops(q, kind) {
   let list = state.index.stops;
   if (kind !== "all") list = list.filter((s) => s.kind === kind);
   if (q) {
+    const qq = q.replace(/[-\s·]/g, "");
     list = list.filter((s) => {
       if (s.name.toLowerCase().includes(q)) return true;
-      for (const [jp, en] of Object.entries(ALIAS))
-        if (s.name.includes(jp) && en.includes(q)) return true;
+      const e = (en(s.name) || "").toLowerCase();
+      if (e.includes(q) || e.replace(/[-\s·]/g, "").includes(qq)) return true;
+      for (const [jp, en2] of Object.entries(ALIAS))
+        if (s.name.includes(jp) && en2.includes(q)) return true;
       return false;
     });
   }
@@ -812,7 +815,7 @@ async function boot() {
   ensureGpsWatch();
   ensurePush();
   if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("sw.js?v=57").catch(() => {});
+    navigator.serviceWorker.register("sw.js?v=58").catch(() => {});
     // when a new version takes over, reload once so users always run latest
     let reloaded = false;
     navigator.serviceWorker.addEventListener("controllerchange", () => {

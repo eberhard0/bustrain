@@ -69,8 +69,13 @@ function placeIndex() {
     out.push({ n: name + "駅", e: (en(name) || name) + " Station", lat: st.lat, lon: st.lon,
       k: "station", station: name });
   for (const p of state.pois || []) out.push(p);
-  for (const s of state.index.stops)
+  for (const s of state.index.stops) {
     if (s.kind === "bus") out.push({ n: s.name, e: en(s.name), lat: s.lat, lon: s.lon, k: "stop" });
+    // corridor cities list stations above; pattern-rail cities list them here
+    else if (state.cityMeta.railPatterns) {
+      out.push({ n: s.name, e: en(s.name), lat: s.lat, lon: s.lon, k: "station" });
+    }
+  }
   state._places = out;
   return out;
 }
