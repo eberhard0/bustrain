@@ -78,12 +78,14 @@ const fold = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 function suggestPlaces(q) {
   q = fold(q.trim());
   if (!q) return [];
+  const qq = q.replace(/[-\s·]/g, ""); // "sensoji" must match "Sensō-ji"
   const scored = [];
   for (const p of placeIndex()) {
     const jp = p.n.toLowerCase(), e = fold(p.e || "");
+    const ee = e.replace(/[-\s·]/g, "");
     let s = -1;
-    if (jp.startsWith(q) || e.startsWith(q)) s = 0;
-    else if (jp.includes(q) || e.includes(q)) s = 1;
+    if (jp.startsWith(q) || e.startsWith(q) || ee.startsWith(qq)) s = 0;
+    else if (jp.includes(q) || e.includes(q) || ee.includes(qq)) s = 1;
     else {
       for (const [kjp, ken] of Object.entries(ALIAS))
         if (p.n.includes(kjp) && ken.includes(q)) { s = 2; break; }
@@ -122,7 +124,7 @@ async function busViaPatterns(oLat, oLon, place, nowMin, tk, yk, originOverride,
   const originStops = originOverride
     ? originOverride.map((s) => ({ ...s, _d: haversine(oLat, oLon, s.lat, s.lon) }))
     : near(oLat, oLon, 900, 10); // metro-scale stop spacing
-  const destStops = near(place.lat, place.lon, 900, 6); // big-city stop spacing
+  const destStops = near(place.lat, place.lon, kind === "train" ? 1200 : 900, 6);
   if (!originStops.length || !destStops.length) return null;
   const destByName = new Map(destStops.map((s) => [s.name, s]));
   // a candidate wins on clearly-earlier arrival; on near-ties (≤3 min) the one
@@ -411,9 +413,20 @@ async function renderVerdict() {
     }
   }
   if (!bus && !train) {
-    box.innerHTML = `No more departures toward <b>${esc(pName)}</b> today from your picked
-      stops — and nothing reachable on foot nearby either. Try the <b>Search</b> tab for
-      the full picture, or check tomorrow's first departures in a stop's timetable.`;
+    const gLat = state.geo ? state.geo.lat : (busPick || trainPick).lat;
+    const gLon = state.geo ? state.geo.lon : (busPick || trainPick).lon;
+    const anyToday = await busViaPatterns(gLat, gLon, p, 0, tk, yk) ||
+      (state.cityMeta.railPatterns
+        ? await busViaPatterns(gLat, gLon, p, 0, tk, yk, null, "train") : null);
+    const gmaps = `https://www.google.com/maps/dir/?api=1&origin=${gLat},${gLon}` +
+      `&destination=${p.lat},${p.lon}&travelmode=transit`;
+    box.innerHTML = anyToday
+      ? `The last direct ride toward <b>${esc(pName)}</b> already left today — the first
+         tomorrow leaves around <b>${fmtMin(anyToday.dep)}</b>.`
+      : `No single ride connects here to <b>${esc(pName)}</b> — that trip needs a transfer,
+         which BusTrain doesn't route yet.
+         <a class="maps" target="_blank" rel="noopener" href="${gmaps}">🗺 Multi-leg route
+         in Google Maps</a>`;
     state.lastOptions = null;
     return;
   }

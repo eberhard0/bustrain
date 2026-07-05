@@ -47,6 +47,11 @@ def build_feed(feed_id, raw_dir, prefix, horizon_days=400):
     cal_dates = read_csv(p / "calendar_dates.txt")
     stops = read_csv(p / "stops.txt")
     trips = read_csv(p / "trips.txt")
+    svc_trips = defaultdict(frozenset)
+    _st = defaultdict(set)
+    for t in trips:
+        _st[t["service_id"]].add(t["trip_id"])
+    svc_trips.update({k: frozenset(v) for k, v in _st.items()})
     stop_times = read_csv(p / "stop_times.txt")
     routes = {r["route_id"]: r for r in read_csv(p / "routes.txt")}
     freqs = defaultdict(list)
@@ -83,11 +88,14 @@ def build_feed(feed_id, raw_dir, prefix, horizon_days=400):
         date_to_set[d] = frozenset(active)
     set_to_dt, dt_sets, dates_map, dt_dates = {}, [], {}, defaultdict(list)
     for d, sset in date_to_set.items():
-        if sset not in set_to_dt:
-            set_to_dt[sset] = len(dt_sets)
+        # calendars love micro-variants (school days etc.) — day types that
+        # activate the same TRIPS produce identical timetables; merge them
+        key = frozenset().union(*(svc_trips[s2] for s2 in sset)) if sset else frozenset()
+        if key not in set_to_dt:
+            set_to_dt[key] = len(dt_sets)
             dt_sets.append(sset)
-        dates_map[d.strftime("%Y%m%d")] = set_to_dt[sset]
-        dt_dates[set_to_dt[sset]].append(d)
+        dates_map[d.strftime("%Y%m%d")] = set_to_dt[key]
+        dt_dates[set_to_dt[key]].append(d)
     dt_labels, used = {}, defaultdict(int)
     for dtid, ds in dt_dates.items():
         w = sum(1 for d in ds if d.weekday() < 5)
@@ -110,7 +118,7 @@ def build_feed(feed_id, raw_dir, prefix, horizon_days=400):
     trip_info = {}
     for t in trips:
         r = routes.get(t["route_id"], {})
-        trip_info[t["trip_id"]] = (r.get("route_short_name") or "", t["route_id"],
+        trip_info[t["trip_id"]] = (r.get("route_short_name") or r.get("route_long_name") or "", t["route_id"],
                                    t.get("trip_headsign") or "", t["service_id"])
     by_trip = defaultdict(list)
     for st in stop_times:
@@ -204,11 +212,17 @@ def build_city(feeds, raw_root, out_dir):
         all_patterns.update(patterns)
         count = 0
         for i, (name, entries) in enumerate(sorted(deps.items())):
-            per_dt = {}
+            per_dt, seen_rows = {}, {}
             for dtid, svcset in enumerate(dt_sets):
                 rows = sorted([row for (svc, row) in entries if svc in svcset],
                               key=lambda x: x[0])
-                if rows:
+                if not rows:
+                    continue
+                sig = json.dumps(rows)
+                if sig in seen_rows:  # identical day: store an alias, not a copy
+                    per_dt[str(dtid)] = seen_rows[sig]
+                else:
+                    seen_rows[sig] = str(dtid)
                     per_dt[str(dtid)] = rows
             if not per_dt:
                 continue

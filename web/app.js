@@ -114,7 +114,11 @@ function enHeadsign(h, kind) {
 async function loadStop(id) {
   if (!state.stopCache[id]) {
     const r = await fetch(cityPath(`stops/${id}.json`));
-    state.stopCache[id] = await r.json();
+    const st = await r.json();
+    for (const k in st.departures) { // day-type aliases point at identical days
+      if (typeof st.departures[k] === "string") st.departures[k] = st.departures[st.departures[k]];
+    }
+    state.stopCache[id] = st;
   }
   return state.stopCache[id];
 }
@@ -808,7 +812,7 @@ async function boot() {
   ensureGpsWatch();
   ensurePush();
   if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("sw.js?v=52").catch(() => {});
+    navigator.serviceWorker.register("sw.js?v=55").catch(() => {});
     // when a new version takes over, reload once so users always run latest
     let reloaded = false;
     navigator.serviceWorker.addEventListener("controllerchange", () => {

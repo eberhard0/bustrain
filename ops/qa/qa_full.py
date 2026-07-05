@@ -162,6 +162,43 @@ async def flow_jakarta(page, ctx, tag, shot):
     return errors, bad
 
 
+async def flow_tokyo(page, ctx, tag, shot):
+    """Tokyo parity pass: real-GTFS rail city with generated Metro layer."""
+    errors = []
+    page.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    bad = []
+    page.on("response", lambda r: bad.append(f"{r.status} {r.url}")
+            if r.status >= 400 and "127.0.0.1" in r.url else None)
+    await ctx.set_geolocation({"latitude": 35.6896, "longitude": 139.7006})  # Shinjuku
+    await page.goto(URL, wait_until="networkidle")
+    await page.evaluate("localStorage.clear(); localStorage.setItem('bt_city','tokyo');"
+                        "localStorage.setItem('bt_howto_done','1'); state.geo = null")
+    await page.wait_for_timeout(1500)
+    await page.reload(wait_until="networkidle")
+    await page.wait_for_timeout(2000)
+    await shot("30-tokyo-home")
+    await page.click("#vs-locate")
+    await page.wait_for_timeout(3000)
+    await page.fill("#vs-to-input", "tokyo tower")
+    await page.wait_for_timeout(1000)
+    if await page.locator("#vs-sugg .sg").count():
+        texts = await page.locator("#vs-sugg .sg").all_inner_texts()
+        idx = next((i for i, t in enumerate(texts) if "東京タワー" in t), 0)
+        await page.locator("#vs-sugg .sg").nth(idx).dispatch_event("mousedown")
+        await page.wait_for_timeout(5500)
+    await shot("31-tokyo-verdict")
+    await page.click('nav a[data-tab="nearby"]')
+    await page.click("#nearby-btn")
+    await page.wait_for_timeout(1500)
+    if await page.locator("#nearby-results .row").count():
+        await page.click("#nearby-results .row >> nth=0")
+        await page.wait_for_timeout(1200)
+        await shot("32-tokyo-detail")
+        await page.click("#detail-close")
+    return errors, bad
+
+
 async def main():
     async with async_playwright() as p:
         report = {}
@@ -181,7 +218,8 @@ async def main():
 
             e1, b1 = await flow(page, ctx, engine, shot)
             e2, b2 = await flow_jakarta(page, ctx, engine, shot)
-            report[engine] = (e1 + e2, b1 + b2)
+            e3, b3 = await flow_tokyo(page, ctx, engine, shot)
+            report[engine] = (e1 + e2 + e3, b1 + b2 + b3)
             await browser.close()
 
         ok = True

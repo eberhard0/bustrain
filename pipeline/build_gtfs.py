@@ -20,7 +20,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 RAW = ROOT / "data" / "raw"
-OUT = ROOT / "web" / "data"
+OUT = ROOT / "web" / "data" / "beppu_oita"
 
 FEEDS = {
     "oitabus":    {"name": "大分バス",   "name_en": "Oita Bus",   "color": "#C8102E"},
