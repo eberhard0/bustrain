@@ -68,7 +68,11 @@ def build(src_path, out_dir, line_cfg, wk_windows, we_windows, agency, currency,
     fare_attrs, fare_rules, names_en = {}, [], {}
     sid_of = {}
     for ref, seq in sorted(lines.items()):
-        rid, jp, en, speed, ladder, loop = line_cfg[ref]
+        cfg = line_cfg[ref]
+        rid, jp, en, speed, ladder, loop = cfg[:6]
+        # optional 7th element: per-line {"WK": [...], "WE": [...]} headway override
+        line_wk = cfg[6]["WK"] if len(cfg) > 6 else wk_windows
+        line_we = cfg[6]["WE"] if len(cfg) > 6 else we_windows
         routes.append({"route_id": rid, "agency_id": agency[0], "route_short_name": jp,
                        "route_long_name": f"{jp} {en}", "route_type": 1})
         names_en[jp] = en
@@ -88,7 +92,7 @@ def build(src_path, out_dir, line_cfg, wk_windows, we_windows, agency, currency,
             cum.append(cum[-1] + km / speed * 60 + 0.7)
         for direction, s2 in (("D0", seq), ("D1", list(reversed(seq)))):
             offs = cum if direction == "D0" else [cum[-1] - c for c in reversed(cum)]
-            for svc, windows in (("WK", wk_windows), ("WE", we_windows)):
+            for svc, windows in (("WK", line_wk), ("WE", line_we)):
                 tid = f"{rid}-{direction}-{svc}"
                 trips.append({"trip_id": tid, "route_id": rid, "service_id": svc,
                               "trip_headsign": s2[-1][0], "direction_id": direction[-1]})

@@ -100,7 +100,7 @@ GTFS input: download the three Ōita feeds from the [Ōita open-data catalog
 | City | Data | Modes |
 |---|---|---|
 | Beppu & Ōita, Japan | Ōita Pref. GTFS-JP ×3 + JR Kyushu timetables | bus + train, ¥ |
-| Jakarta, Indonesia | TransJakarta GTFS + MRT/LRT headway model | bus + rail, Rp |
+| Jakarta, Indonesia | TransJakarta GTFS + MRT/LRT headway model + rough KRL layer | bus + rail, Rp |
 | Tokyo, Japan | Toei Subway/Bus GTFS (ODPT public) + Metro/Yamanote headway model | bus + rail, ¥ |
 | Nagoya, Japan | City Bus GTFS-JP (city open data) + subway headway model | bus + rail, ¥ |
 | Fukuoka, Japan | City Subway headway model (Nishitetsu publishes no open bus GTFS) | rail only, ¥ |

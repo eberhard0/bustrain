@@ -20,6 +20,8 @@ FEEDS = {
                      "color": "#00549F", "prefix": "tj"},
     "jakartarail": {"name": "MRT / LRT", "name_en": "MRT & LRT (headway model)",
                     "color": "#C8102E", "prefix": "jr2", "kind": "train"},
+    "jakartakrl": {"name": "KRL Commuter", "name_en": "KRL Commuterline (rough headway model)",
+                   "color": "#E30613", "prefix": "kr", "kind": "train"},
 }
 
 
