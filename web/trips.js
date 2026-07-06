@@ -154,6 +154,7 @@ async function busViaPatterns(oLat, oLon, place, nowMin, tk, yk, originOverride,
         const finalWalk = walkMin(ds._d);
         const cand = { total: arr + finalWalk, dep: d.m, arr, dur: arr - d.m,
           stops: j - d.i - 1, sign: d.h, signEn: en(d.h),
+          bay: (pat.pl && pat.pl[d.i]) || null,
           label: `${d.r ? "[" + d.r + "] " : ""}from ${os.name}`,
           labelEn: `from ${en(os.name) || os.name}`,
           walk, lat: os.lat, lon: os.lon, boardAt: os.name, stopId: os.id,
@@ -437,7 +438,7 @@ async function renderVerdict() {
   }
   const line = (side, x) => x
     ? `${side === "bus" ? "🚌" : "🚆"} <b>${fmtMin(x.dep)} → ~${fmtMin(x.total ?? x.arr)}</b> at ${esc(p.n)}
-       ${x.walk ? `· 🚶 ${x.walk} min to ${esc(x.boardAt || "the stop")} ${esc(en(x.boardAt) || "")}` : ""}
+       ${x.walk ? `· 🚶 ${x.walk} min to ${esc(x.boardAt || "the stop")} ${esc(en(x.boardAt) || "")}` : ""}${x.bay ? ` · 🛤 bay ${esc(x.bay)}` : ""}
        · get off ${esc(x.alightName || "")} ${esc(en(x.alightName) || "")}${x.finalWalk ? ` + 🚶 ${x.finalWalk} min` : ""}
        · ${x.fare ? "~" + fmtFare(x.fare) : "fare n/a"}`
     : `${side === "bus" ? "🚌" : "🚆"} no option today`;
@@ -571,7 +572,7 @@ async function renderJourney() {
           in ${inMin} min</span></div>
       <div class="jmap" id="jmap-${side}"></div>
       <div class="jsub">${esc(x.label)}${x.labelEn ? ` <span class="ename" style="display:inline">${esc(x.labelEn)}</span>` : ""}<br>
-        <span class="board">🪧 Board the ${side} signed <b>「${esc(x.sign)}」</b>${x.signEn ? ` · ${esc(x.signEn)}` : ""}</span><br>
+        <span class="board">🪧 Board the ${side} signed <b>「${esc(x.sign)}」</b>${x.signEn ? ` · ${esc(x.signEn)}` : ""}${x.bay ? ` · 🛤 <b>bay ${esc(x.bay)}</b>` : ""}</span><br>
         <span class="assure">✓ Get off at <b>${esc(x.alightName)}</b> ${esc(en(x.alightName))}
           — the <b>${ordinal((x.stops ?? 0) + 1)} stop</b>, ~${fmtMin(x.arr)}</span><br>
         then 🚶 ${x.finalWalk} min walk (${fmtDist(x.finalDist)}) →

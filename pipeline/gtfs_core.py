@@ -175,6 +175,13 @@ def build_feed(feed_id, raw_dir, prefix, horizon_days=400):
         patterns[pid] = {"r": short, "s": names,
                          "o": [round(sorted(c)[len(c) // 2]) for c in cols]}
 
+    # --- per-pattern platform/bay codes (GTFS platform_code, e.g. bus bays) ---
+    plat = {s["stop_id"]: (s.get("platform_code") or "").strip() for s in stops}
+    for pid, (rid, sids) in pat_rep.items():
+        codes = [plat.get(sid, "") for sid in sids]
+        if any(codes):
+            patterns[pid]["pl"] = codes
+
     # --- per-pattern fare matrix ---
     zones = {s["stop_id"]: s.get("zone_id") or s["stop_id"] for s in stops}
     price = {f["fare_id"]: int(float(f["price"])) for f in read_csv(p / "fare_attributes.txt")}
