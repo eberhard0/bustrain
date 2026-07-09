@@ -295,7 +295,9 @@ function renderSearch() {
   const q = $("#search-input").value;
   const list = searchStops(q, state.vsPicking);
   $("#search-results").innerHTML = list.map((s) => stopRowHTML(s, true)).join("") ||
-    `<div class="empty"><p>No stops match.</p></div>`;
+    `<div class="empty"><p>No stops match.</p>
+      <p>Looking for a <b>place</b> (shrine, mall, hotel…)?</p>
+      <button class="linkbtn" id="try-places">🔍 Search it as a destination instead</button></div>`;
 }
 
 /* ---------- nearby ---------- */
@@ -769,6 +771,16 @@ function bindEvents() {
     save(); updateStarBtn();
   });
   $("#search-input").addEventListener("input", renderSearch);
+  $("#search-results").addEventListener("click", (e) => {
+    if (e.target.id !== "try-places") return;
+    const q = $("#search-input").value;
+    $("#stop-search").classList.add("hidden");
+    $("#journey").classList.remove("hidden");
+    const inp = $("#j-to-input");
+    inp.value = q;
+    inp.dispatchEvent(new Event("input", { bubbles: true }));
+    inp.focus();
+  });
   document.querySelectorAll(".fbtn").forEach((b) => b.addEventListener("click", () => {
     document.querySelectorAll(".fbtn").forEach((x) => x.classList.remove("active"));
     b.classList.add("active"); state.searchKind = b.dataset.f; renderSearch();
@@ -849,7 +861,7 @@ async function boot() {
   ensureGpsWatch();
   ensurePush();
   if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("sw.js?v=66").catch(() => {});
+    navigator.serviceWorker.register("sw.js?v=68").catch(() => {});
     // when a new version takes over, reload once so users always run latest
     let reloaded = false;
     navigator.serviceWorker.addEventListener("controllerchange", () => {
