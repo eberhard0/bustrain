@@ -774,6 +774,7 @@ function bindEvents() {
   $("#search-results").addEventListener("click", (e) => {
     if (e.target.id !== "try-places") return;
     const q = $("#search-input").value;
+    state.vsPicking = null; // leave pick-mode; we're doing a destination search now
     $("#stop-search").classList.add("hidden");
     $("#journey").classList.remove("hidden");
     const inp = $("#j-to-input");
@@ -861,7 +862,7 @@ async function boot() {
   ensureGpsWatch();
   ensurePush();
   if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("sw.js?v=68").catch(() => {});
+    navigator.serviceWorker.register("sw.js?v=69").catch(() => {});
     // when a new version takes over, reload once so users always run latest
     let reloaded = false;
     navigator.serviceWorker.addEventListener("controllerchange", () => {
